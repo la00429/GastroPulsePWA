@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#ffb454" />
+    <meta name="description" content="GastroPulse: comandas sincronizadas, incluso sin conexión." />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" href="/icons/icon.svg" />
+    <link rel="stylesheet" href="/css/styles.css" />
+    <title>GastroPulse</title>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="GastroPulse inicio"><span class="brand-mark">G</span><span>Gastro<span>Pulse</span></span></a>
+      <div class="topbar-actions"><span id="connection-status" class="status-pill offline"><i></i> Offline</span><label class="currency-picker" aria-label="Moneda"><span>Moneda</span><select id="currency-select"><option value="COP" selected>COP $</option><option value="USD">USD $</option></select></label><button id="theme-toggle" class="icon-button" aria-label="Cambiar tema">☼</button></div>
+    </header>
+
+    <main>
+      <section id="waiter-view" class="view active" aria-labelledby="waiter-title">
+        <div class="hero-row"><div><p class="eyebrow">OPERACIÓN · MESERO</p><h1 id="waiter-title">Toma la comanda.<br /><em>Nosotros hacemos el resto.</em></h1></div><div class="avatar">JR</div></div>
+        <div class="table-toolbar"><label for="table-select">Mesa activa</label><div class="table-controls"><select id="table-select"><option value="1">Mesa 1 · Terraza</option><option value="2">Mesa 2 · Terraza</option><option value="3">Mesa 3 · Salón</option><option value="4">Mesa 4 · Salón</option><option value="5" selected>Mesa 5 · Salón</option><option value="6">Mesa 6 · Barra</option></select><button id="scan-qr" class="secondary-button">▣ Escanear QR</button></div></div>
+        <div id="order-status" class="notice"><span class="notice-icon">↯</span><span><strong>Offline · Guardado en IndexedDB</strong><small>Se sincronizará al recuperar conexión.</small></span></div>
+        <div class="section-heading"><div><p class="eyebrow">CATÁLOGO RÁPIDO</p><h2>¿Qué servimos?</h2></div><button id="clear-order" class="text-button">Limpiar borrador</button></div>
+        <div id="menu-grid" class="menu-grid"></div>
+        <div class="voice-card"><div class="voice-copy"><span class="eyebrow">MANOS LIBRES</span><h2>Di tu comanda</h2><p>“Mesa 4, dos cervezas y una hamburguesa sin cebolla”</p></div><button id="voice-button" class="voice-button" aria-label="Dictar comanda"><span>●</span></button></div>
+        <div class="order-draft"><div class="section-heading"><h2>Borrador · Mesa <span id="draft-table">5</span></h2><span id="draft-total" class="total">€0,00</span></div><div id="draft-items" class="draft-items"><p class="empty-state">Añade productos o dicta tu comanda.</p></div><button id="send-order" class="primary-button full-width">Enviar comanda a cocina <span>→</span></button></div>
+      </section>
+
+      <section id="kitchen-view" class="view" aria-labelledby="kitchen-title">
+        <div class="hero-row"><div><p class="eyebrow">KDS · COCINA</p><h1 id="kitchen-title">Ritmo de servicio <em>en vivo.</em></h1></div><span class="live-dot">● EN VIVO</span></div>
+        <div class="kds-summary"><span><strong id="incoming-count">3</strong> comandas activas</span><span class="muted">Actualizado ahora</span></div>
+        <div id="kds-board" class="kds-board"></div>
+      </section>
+
+      <section id="customer-view" class="view" aria-labelledby="customer-title">
+        <div class="customer-hero"><span class="brand-mark large">G</span><p class="eyebrow">AUTO-PEDIDO</p><h1 id="customer-title">Disfruta el momento.<br /><em>Nosotros te escuchamos.</em></h1><p>Escanea el QR de tu mesa y pide cuando quieras.</p></div>
+        <div class="verification-card"><span class="check">✓</span><div><strong>Ubicación y Wi-Fi verificados</strong><small>Estás dentro de GastroPulse · Mesa <span id="customer-table">5</span></small></div></div>
+        <button id="customer-voice" class="customer-voice"><span class="mic-icon">●</span><strong>Pulsa para pedir</strong><small>Habla con naturalidad, te estamos escuchando</small></button>
+        <button id="customer-menu" class="secondary-button full-width">Ver menú completo</button>
+      </section>
+
+      <section id="delivery-banner" class="delivery-banner" aria-live="polite">
+        <div class="delivery-icon">✦</div><div class="delivery-copy"><span class="eyebrow">CAMINANTE ACTIVADO</span><h2>Tu pedido va en camino</h2><p>La comanda de la <strong>Mesa 5</strong> está llegando.</p><div class="progress"><span></span></div><small>Preparado por Cocina · hace 2 min</small></div><button id="dismiss-delivery" class="icon-button" aria-label="Cerrar">×</button>
+      </section>
+    </main>
+
+    <nav class="bottom-nav" aria-label="Navegación principal"><button class="nav-item active" data-view="waiter-view"><span>⌂</span><small>Mesero</small></button><button class="nav-item" data-view="kitchen-view"><span>▤</span><small>Cocina <b>3</b></small></button><button class="nav-item" data-view="customer-view"><span>♧</span><small>Cliente</small></button></nav>
+    <div id="toast" class="toast" role="status"></div>
+    <script type="module" src="/js/app.js"></script>
+  </body>
+</html>

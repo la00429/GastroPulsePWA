@@ -1,0 +1,13 @@
+{
+  "name": "GastroPulse",
+  "short_name": "GastroPulse",
+  "description": "Gestión de comandas offline-first para restaurantes",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0d1117",
+  "theme_color": "#ffb454",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
