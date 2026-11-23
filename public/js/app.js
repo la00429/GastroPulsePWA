@@ -1,4 +1,4 @@
-import { seedMenu, saveOrder, getAll, clearDraft, saveIncident, removeIncident } from './db.js';
+import { seedMenu, saveOrder, getAll, clearDraft, saveIncident, removeIncident, registerSync } from './db.js';
 import { createVoiceController, parseOrderSpeech, isVoiceSupported } from './voice.js';
 import { setupSensors, scanQrCode, captureIncident } from './sensors.js';
 import { requestPushPermission } from './push.js';
@@ -944,6 +944,7 @@ async function init() {
     document.querySelector('#order-status').style.display = online ? 'none' : '';
   }
   window.addEventListener('online', updateOnlineStatus);
+  window.addEventListener('online', () => registerSync());
   window.addEventListener('offline', updateOnlineStatus);
   updateOnlineStatus();
 

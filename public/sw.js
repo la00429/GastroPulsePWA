@@ -104,9 +104,20 @@ async function flushSyncQueue() {
     }
   }
 
-  // Incidents: best-effort, remove from queue regardless (no server endpoint yet)
+  // Incidents: sync to the server and remove only after success
   for (const item of incidentItems) {
-    await deleteFromStore(db, 'sync_queue', item.id).catch(() => null);
+    try {
+      const response = await fetch('/api/complaints', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(item.payload),
+      });
+      if (response.ok) {
+        await deleteFromStore(db, 'sync_queue', item.id);
+      }
+    } catch (_err) {
+      // Network failure — leave in queue for the next sync attempt
+    }
   }
 
   // Notify all open clients that sync completed
@@ -142,12 +153,12 @@ self.addEventListener('notificationclick', (event) => {
 // ── IndexedDB helpers (no imports available in SW) ────────────────────────
 function openIDB() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open('gastropulse-db', 2);
+    const req = indexedDB.open('gastropulse-db', 3);
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
     req.onupgradeneeded = () => {
       const db = req.result;
-      ['menu', 'comandas', 'sync_queue'].forEach((store) => {
+      ['menu', 'comandas', 'sync_queue', 'incidencias'].forEach((store) => {
         if (!db.objectStoreNames.contains(store)) {
           db.createObjectStore(store, { keyPath: 'id' });
         }

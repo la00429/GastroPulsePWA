@@ -93,10 +93,24 @@ export async function saveIncident(incident) {
   await put('sync_queue', {
     id: crypto.randomUUID(),
     type: 'INCIDENT',
-    payload: { id: stored.id, table: stored.table, note: stored.note, source: stored.source, createdAt: stored.createdAt },
+    payload: {
+      id: stored.id,
+      table: stored.table,
+      note: stored.note,
+      source: stored.source,
+      hasPhoto: Boolean(stored.photoDataUrl),
+      createdAt: stored.createdAt,
+    },
     createdAt: stored.createdAt,
   });
+  await registerSync();
   return stored;
+}
+
+export async function registerSync() {
+  if (!('serviceWorker' in navigator)) return;
+  const registration = await navigator.serviceWorker.ready;
+  await registration.sync?.register('gastropulse-sync').catch(() => null);
 }
 
 export async function removeIncident(id) {
