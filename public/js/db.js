@@ -85,6 +85,7 @@ export async function saveIncident(incident) {
     table: incident.table,
     photoDataUrl: incident.photoDataUrl || null,
     note: incident.note || '',
+    source: incident.source || 'staff',   // 'staff' | 'customer'
     createdAt: new Date().toISOString(),
   };
   await put('incidencias', stored);
@@ -92,7 +93,7 @@ export async function saveIncident(incident) {
   await put('sync_queue', {
     id: crypto.randomUUID(),
     type: 'INCIDENT',
-    payload: { id: stored.id, table: stored.table, note: stored.note, createdAt: stored.createdAt },
+    payload: { id: stored.id, table: stored.table, note: stored.note, source: stored.source, createdAt: stored.createdAt },
     createdAt: stored.createdAt,
   });
   return stored;

@@ -178,6 +178,43 @@
         </button>
         <div id="customer-transcript" class="voice-transcript hidden" aria-live="polite"></div>
         <button id="customer-menu" class="secondary-button full-width" style="margin-top:16px">Ver menú completo</button>
+
+        <!-- ── Reportar problema ───────────────────────────────────────── -->
+        <div class="complaint-section">
+          <div class="complaint-header">
+            <span class="complaint-icon">⚠︎</span>
+            <div>
+              <strong>¿Algo salió mal?</strong>
+              <small>Toma una foto de tu plato y cuéntanos qué pasó. Lo resolvemos de inmediato.</small>
+            </div>
+          </div>
+
+          <!-- Note input -->
+          <textarea
+            id="complaint-note"
+            class="complaint-textarea"
+            placeholder='Ej: "El plato llegó frío", "Encontré un pelo", "Falta la guarnición"…'
+            rows="2"
+            maxlength="200"
+          ></textarea>
+          <small id="complaint-note-counter" class="complaint-counter">0 / 200</small>
+
+          <!-- Photo preview -->
+          <div id="complaint-preview" class="complaint-preview hidden">
+            <img id="complaint-img" src="" alt="Foto de la queja" />
+            <button id="complaint-retake" class="complaint-retake-btn" aria-label="Volver a tomar foto">↺ Cambiar foto</button>
+          </div>
+
+          <div class="complaint-actions">
+            <button id="complaint-photo-btn" class="secondary-button complaint-cam-btn">
+              📷 Tomar foto
+            </button>
+            <button id="complaint-send-btn" class="primary-button" disabled>
+              Enviar queja →
+            </button>
+          </div>
+          <p id="complaint-status" class="complaint-status hidden"></p>
+        </div>
       </section>
 
       <!-- ── Caminante banner ───────────────────────────────────────────── -->

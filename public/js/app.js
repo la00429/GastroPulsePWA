@@ -348,22 +348,28 @@ async function renderIncidents() {
     return;
   }
 
-  board.innerHTML = incidents.map((inc) => `
-    <article class="incident-card" data-incident-id="${inc.id}">
+  board.innerHTML = incidents.map((inc) => {
+    const isCustomer = inc.source === 'customer';
+    const badge = isCustomer
+      ? `<span class="incident-source-badge source-customer">CLIENTE</span>`
+      : `<span class="incident-source-badge source-staff">COCINA</span>`;
+    return `
+    <article class="incident-card${isCustomer ? ' incident-customer' : ''}" data-incident-id="${inc.id}">
       <div class="incident-photo">
         ${inc.photoDataUrl
           ? `<img src="${inc.photoDataUrl}" alt="Foto incidencia Mesa ${inc.table}" />`
           : `<div class="incident-no-photo"><span>📷</span><small>Sin foto</small></div>`}
+        ${badge}
       </div>
       <div class="incident-info">
-        <span class="role-chip role-kitchen" style="font-size:9px;padding:2px 7px">COCINA</span>
-        <p class="eyebrow" style="margin-top:6px">MESA ${inc.table}</p>
+        <p class="eyebrow" style="margin-top:4px">MESA ${inc.table}</p>
         <strong class="incident-time">${formatTime(inc.createdAt)}</strong>
         <small class="incident-date">${new Date(inc.createdAt).toLocaleDateString('es-CO', { day:'2-digit', month:'short', year:'numeric' })}</small>
         ${inc.note ? `<p class="incident-note">"${inc.note}"</p>` : ''}
       </div>
       <button class="incident-delete" data-delete="${inc.id}" aria-label="Eliminar incidencia">✕</button>
-    </article>`).join('');
+    </article>`;
+  }).join('');
 }
 
 document.querySelector('#incidents-board').addEventListener('click', async (e) => {
@@ -464,6 +470,117 @@ function setVerifyFailed(title, detail = '') {
 }
 
 document.querySelector('#verify-location-btn').addEventListener('click', startLocationVerification);
+
+// ── Customer complaint flow ───────────────────────────────────────────────
+function initComplaintFlow() {
+  const photoBtn    = document.querySelector('#complaint-photo-btn');
+  const sendBtn     = document.querySelector('#complaint-send-btn');
+  const retakeBtn   = document.querySelector('#complaint-retake');
+  const noteEl      = document.querySelector('#complaint-note');
+  const counterEl   = document.querySelector('#complaint-note-counter');
+  const previewWrap = document.querySelector('#complaint-preview');
+  const previewImg  = document.querySelector('#complaint-img');
+  const statusEl    = document.querySelector('#complaint-status');
+
+  let capturedDataUrl = null;
+
+  // Character counter
+  noteEl.addEventListener('input', () => {
+    counterEl.textContent = `${noteEl.value.length} / 200`;
+  });
+
+  // Enable send once we have a note OR a photo
+  function updateSendBtn() {
+    sendBtn.disabled = !capturedDataUrl && !noteEl.value.trim();
+  }
+  noteEl.addEventListener('input', updateSendBtn);
+
+  // Take photo
+  photoBtn.addEventListener('click', async () => {
+    photoBtn.disabled = true;
+    photoBtn.textContent = '⏳ Abriendo cámara…';
+    try {
+      const result = await captureIncident({ captureDelayMs: 2500 });
+      capturedDataUrl = result.dataUrl;
+      previewImg.src = capturedDataUrl;
+      previewWrap.classList.remove('hidden');
+      photoBtn.textContent = '✓ Foto tomada';
+      updateSendBtn();
+    } catch (err) {
+      photoBtn.disabled = false;
+      photoBtn.textContent = '📷 Tomar foto';
+      showToast(`Cámara no disponible: ${err.message}`);
+    }
+  });
+
+  // Retake
+  retakeBtn.addEventListener('click', async () => {
+    capturedDataUrl = null;
+    previewWrap.classList.add('hidden');
+    previewImg.src = '';
+    photoBtn.disabled = false;
+    photoBtn.textContent = '📷 Tomar foto';
+    updateSendBtn();
+    photoBtn.click();
+  });
+
+  // Send complaint
+  sendBtn.addEventListener('click', async () => {
+    const note = noteEl.value.trim();
+    if (!capturedDataUrl && !note) return;
+
+    sendBtn.disabled = true;
+    sendBtn.textContent = '⏳ Enviando…';
+    statusEl.className = 'complaint-status';
+    statusEl.textContent = '';
+
+    try {
+      await saveIncident({
+        table: Number(tableSelect.value),
+        photoDataUrl: capturedDataUrl,
+        note,
+        source: 'customer',
+      });
+
+      // Notify kitchen via push if possible
+      if (navigator.onLine) {
+        fetch('/api/push/kitchen-ready', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            table: Number(tableSelect.value),
+            title: 'GastroPulse · Queja de cliente',
+            body: `Mesa ${tableSelect.value}: ${note || 'El cliente reportó un problema con su plato.'}`,
+          }),
+        }).catch(() => null);
+      }
+
+      // Reset form
+      noteEl.value = '';
+      counterEl.textContent = '0 / 200';
+      capturedDataUrl = null;
+      previewWrap.classList.add('hidden');
+      previewImg.src = '';
+      photoBtn.disabled = false;
+      photoBtn.textContent = '📷 Tomar foto';
+      sendBtn.textContent = 'Enviar queja →';
+      updateSendBtn();
+
+      statusEl.className = 'complaint-status success';
+      statusEl.textContent = '✓ Tu queja fue recibida. El equipo la está revisando.';
+      statusEl.classList.remove('hidden');
+      vibrate([80, 40, 80]);
+      await refreshIncidentBadge();
+
+    } catch (err) {
+      sendBtn.disabled = false;
+      sendBtn.textContent = 'Enviar queja →';
+      statusEl.className = 'complaint-status error';
+      statusEl.textContent = `No se pudo enviar: ${err.message}`;
+      statusEl.classList.remove('hidden');
+    }
+  });
+}
 
 // ── Voice ─────────────────────────────────────────────────────────────────
 function showTranscript(el, text, isError = false) {
@@ -625,6 +742,7 @@ async function init() {
   });
 
   initVoice();
+  initComplaintFlow();
 
   window.dispatchEvent(new Event(navigator.onLine ? 'online' : 'offline'));
 }

@@ -98,3 +98,29 @@
 .verify-why span:first-child{flex-shrink:0;font-size:13px}
 #verify-location-btn{margin-top:8px;width:100%;font-size:12px}
 .customer-voice:disabled .mic-icon{background:var(--muted)}
+
+/* ── Customer complaint section ──────────────────────────────────────── */
+.complaint-section{margin-top:28px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 20px 20px}
+.complaint-header{display:flex;gap:12px;align-items:flex-start;margin-bottom:14px}
+.complaint-icon{font-size:22px;line-height:1;flex-shrink:0;margin-top:1px}
+.complaint-header strong{display:block;font-size:14px;margin-bottom:3px}
+.complaint-header small{font-size:12px;color:var(--muted)}
+.complaint-textarea{width:100%;border:1px solid var(--line);border-radius:9px;padding:10px 12px;font:inherit;font-size:13px;background:var(--surface-2);color:var(--ink);resize:none;transition:.15s}
+.complaint-textarea:focus{outline:none;border-color:var(--accent)}
+.complaint-counter{display:block;text-align:right;font-size:10px;color:var(--muted);margin-top:3px}
+.complaint-preview{position:relative;margin-top:12px;border-radius:10px;overflow:hidden;aspect-ratio:16/9;background:var(--surface-2)}
+.complaint-preview img{width:100%;height:100%;object-fit:cover;display:block}
+.complaint-retake-btn{position:absolute;bottom:8px;right:8px;background:#00000080;color:#fff;border-radius:7px;padding:5px 10px;font-size:11px;font-weight:700;border:none;cursor:pointer}
+.complaint-actions{display:flex;gap:10px;margin-top:14px}
+.complaint-cam-btn{flex:1}
+.complaint-actions .primary-button{flex:1}
+.complaint-status{margin-top:10px;font-size:12px;border-radius:8px;padding:9px 12px}
+.complaint-status.success{background:#dff7ed;color:#1a6648}
+.complaint-status.error{background:#fde8e5;color:#922}
+.complaint-status.hidden{display:none}
+/* ── Incident source badges ──────────────────────────────────────────── */
+.incident-source-badge{position:absolute;top:8px;left:8px;border-radius:6px;padding:3px 8px;font-size:9px;font-weight:800;letter-spacing:.8px}
+.source-customer{background:#dd6c5e;color:#fff}
+.source-staff{background:#3dbb95;color:#0d1117}
+/* Customer incident card gets a colored left border */
+.incident-customer{border-left:4px solid var(--danger)}
