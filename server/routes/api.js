@@ -1,9 +1,10 @@
 import { Router } from 'express';
 
 // ---------------------------------------------------------------------------
-// Subscription store abstraction
-// In production (Vercel) we use the KV store so subscriptions survive across
-// serverless function instances. In local dev we fall back to an in-memory Set.
+// KV abstraction — Vercel KV in production, in-memory Maps in local dev.
+// All KV writes use hset (atomic per key). Concurrent writes to different
+// record IDs are safe; concurrent writes to the same ID are last-write-wins,
+// which is acceptable for restaurant operations.
 // ---------------------------------------------------------------------------
 
 let kv = null;
@@ -15,60 +16,72 @@ if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
   });
 }
 
-const SUBS_KEY = 'push:subscriptions';
-const ORDERS_KEY = 'orders';
+// ── Generic KV hash helpers ───────────────────────────────────────────────
+async function kvHset(hashKey, id, value) {
+  const record = { ...value, id, updatedAt: value.updatedAt || new Date().toISOString() };
+  if (kv) {
+    await kv.hset(hashKey, { [id]: JSON.stringify(record) });
+  } else {
+    fallback.get(hashKey)?.set(id, record);
+  }
+  return record;
+}
+
+async function kvHgetall(hashKey) {
+  if (kv) {
+    const hash = await kv.hgetall(hashKey);
+    if (!hash) return [];
+    return Object.values(hash).map((v) => (typeof v === 'string' ? JSON.parse(v) : v));
+  }
+  return [...(fallback.get(hashKey)?.values() ?? [])];
+}
+
+async function kvHget(hashKey, id) {
+  if (kv) {
+    const raw = await kv.hget(hashKey, id);
+    return raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : null;
+  }
+  return fallback.get(hashKey)?.get(id) ?? null;
+}
+
+async function kvHdel(hashKey, id) {
+  if (kv) {
+    await kv.hdel(hashKey, id);
+  } else {
+    fallback.get(hashKey)?.delete(id);
+  }
+}
+
+// In-memory fallback stores (dev only)
+const fallback = new Map([
+  ['push:subscriptions:set', new Set()],
+  ['orders', new Map()],
+  ['complaints', new Map()],
+]);
 
 async function addSubscription(raw) {
   if (kv) {
-    await kv.sadd(SUBS_KEY, raw);
+    await kv.sadd('push:subscriptions', raw);
   } else {
-    fallbackSubscriptions.add(raw);
+    fallback.get('push:subscriptions:set').add(raw);
   }
 }
 
 async function getAllSubscriptions() {
-  if (kv) {
-    return kv.smembers(SUBS_KEY);
-  }
-  return [...fallbackSubscriptions];
+  if (kv) return kv.smembers('push:subscriptions');
+  return [...fallback.get('push:subscriptions:set')];
 }
 
-async function saveOrderToStore(order) {
-  if (kv) {
-    await kv.hset(ORDERS_KEY, { [order.id]: JSON.stringify(order) });
-  } else {
-    fallbackOrders.set(order.id, order);
-  }
+// ── Push helper ───────────────────────────────────────────────────────────
+async function sendPushToAll(webpush, title, body, url = '/') {
+  const subs = await getAllSubscriptions();
+  if (!subs.length) return 0;
+  const payload = JSON.stringify({ title, body, url });
+  const results = await Promise.allSettled(
+    subs.map((raw) => webpush.sendNotification(JSON.parse(raw), payload))
+  );
+  return results.filter((r) => r.status === 'fulfilled').length;
 }
-
-async function getAllOrders() {
-  if (kv) {
-    const hash = await kv.hgetall(ORDERS_KEY);
-    if (!hash) return [];
-    return Object.values(hash).map((v) => (typeof v === 'string' ? JSON.parse(v) : v));
-  }
-  return [...fallbackOrders.values()];
-}
-
-async function updateOrderStatus(id, status) {
-  if (kv) {
-    const raw = await kv.hget(ORDERS_KEY, id);
-    if (!raw) return null;
-    const order = typeof raw === 'string' ? JSON.parse(raw) : raw;
-    const updated = { ...order, status, updatedAt: new Date().toISOString() };
-    await kv.hset(ORDERS_KEY, { [id]: JSON.stringify(updated) });
-    return updated;
-  }
-  const order = fallbackOrders.get(id);
-  if (!order) return null;
-  const updated = { ...order, status, updatedAt: new Date().toISOString() };
-  fallbackOrders.set(id, updated);
-  return updated;
-}
-
-// Used only when KV is not configured (local dev / demo deploy).
-const fallbackSubscriptions = new Set();
-const fallbackOrders = new Map();
 
 export function createApiRouter({ webpush, vapidKeys }) {
   const router = Router();
@@ -80,72 +93,73 @@ export function createApiRouter({ webpush, vapidKeys }) {
 
   // ── Push: VAPID public key ────────────────────────────────────────────────
   router.get('/push/public-key', (_req, res) => {
-    if (!vapidKeys) return res.status(503).json({ error: 'Web Push no configurado. Define VAPID_PUBLIC_KEY y VAPID_PRIVATE_KEY.' });
+    if (!vapidKeys) return res.status(503).json({ error: 'Web Push no configurado.' });
     res.json({ publicKey: vapidKeys.publicKey });
   });
 
   // ── Push: subscribe ───────────────────────────────────────────────────────
   router.post('/push/subscribe', async (req, res) => {
-    const subscription = req.body;
-    if (!subscription?.endpoint) return res.status(400).json({ error: 'Suscripción inválida.' });
-    await addSubscription(JSON.stringify(subscription));
+    const sub = req.body;
+    if (!sub?.endpoint) return res.status(400).json({ error: 'Suscripción inválida.' });
+    await addSubscription(JSON.stringify(sub));
     res.status(201).json({ subscribed: true });
+  });
+
+  // ── Push: notify (generic — used by Caminante, complaints, late orders) ───
+  router.post('/push/notify', async (req, res, next) => {
+    if (!vapidKeys) return res.status(503).json({ error: 'Web Push no configurado.' });
+    try {
+      const { title = 'GastroPulse', body = '', url = '/' } = req.body;
+      const sent = await sendPushToAll(webpush, title, body, url);
+      res.json({ sent });
+    } catch (err) { next(err); }
   });
 
   // ── Push: kitchen ready (Caminante) ──────────────────────────────────────
   router.post('/push/kitchen-ready', async (req, res, next) => {
     if (!vapidKeys) return res.status(503).json({ error: 'Web Push no configurado.' });
     try {
-      const table = req.body?.table || '?';
-      const orderId = req.body?.orderId;
-
-      // Mark the order as served in the store
-      if (orderId) await updateOrderStatus(orderId, 'served').catch(() => null);
-
-      const payload = JSON.stringify({
-        title: 'GastroPulse · Caminante',
-        body: `La comanda de la Mesa ${table} está lista para servir.`,
-        url: '/',
-      });
-      const subs = await getAllSubscriptions();
-      const results = await Promise.allSettled(
-        subs.map((raw) => webpush.sendNotification(JSON.parse(raw), payload))
-      );
-      res.json({ sent: results.filter((r) => r.status === 'fulfilled').length, table });
-    } catch (error) {
-      next(error);
-    }
+      const { table = '?', orderId, title, body } = req.body;
+      if (orderId) {
+        const order = await kvHget('orders', orderId);
+        if (order) await kvHset('orders', orderId, { ...order, status: 'served' });
+      }
+      const pushTitle = title || 'GastroPulse · Caminante';
+      const pushBody  = body  || `La comanda de la Mesa ${table} está lista para servir.`;
+      const sent = await sendPushToAll(webpush, pushTitle, pushBody, '/');
+      res.json({ sent, table });
+    } catch (err) { next(err); }
   });
 
-  // ── Orders: receive synced orders from Background Sync ───────────────────
+  // ── Orders: create (Background Sync) ─────────────────────────────────────
   router.post('/orders', async (req, res, next) => {
     try {
       const orders = Array.isArray(req.body) ? req.body : [req.body];
       const saved = [];
       for (const order of orders) {
         if (!order?.id || !order?.items?.length) continue;
-        const record = { ...order, receivedAt: new Date().toISOString(), status: order.status || 'pending' };
-        await saveOrderToStore(record);
+        const record = {
+          ...order,
+          status: order.status || 'pending',
+          createdAt: order.createdAt || new Date().toISOString(),
+          receivedAt: new Date().toISOString(),
+        };
+        await kvHset('orders', record.id, record);
         saved.push(record.id);
       }
       res.status(201).json({ saved: saved.length, ids: saved });
-    } catch (error) {
-      next(error);
-    }
+    } catch (err) { next(err); }
   });
 
-  // ── Orders: list all orders (used by KDS) ────────────────────────────────
+  // ── Orders: list active ───────────────────────────────────────────────────
   router.get('/orders', async (_req, res, next) => {
     try {
-      const orders = await getAllOrders();
-      // Return pending + preparing orders, sorted newest first
-      const active = orders
+      const all = await kvHgetall('orders');
+      const active = all
         .filter((o) => ['pending', 'preparing'].includes(o.status))
-        .sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0));
+        .sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
       res.json(active);
-    } catch (error) {
-      next(error);
-    }
+    } catch (err) { next(err); }
   });
 
   // ── Orders: update status ─────────────────────────────────────────────────
@@ -155,12 +169,56 @@ export function createApiRouter({ webpush, vapidKeys }) {
       if (!['pending', 'preparing', 'ready', 'served'].includes(status)) {
         return res.status(400).json({ error: 'Estado inválido.' });
       }
-      const updated = await updateOrderStatus(req.params.id, status);
-      if (!updated) return res.status(404).json({ error: 'Orden no encontrada.' });
+      const order = await kvHget('orders', req.params.id);
+      if (!order) return res.status(404).json({ error: 'Orden no encontrada.' });
+      const updated = await kvHset('orders', req.params.id, { ...order, status });
       res.json(updated);
-    } catch (error) {
-      next(error);
-    }
+    } catch (err) { next(err); }
+  });
+
+  // ── Complaints: create ────────────────────────────────────────────────────
+  // Accepts metadata only — no photo (too large for KV).
+  // The photo stays in the client's IndexedDB; the server stores the reference.
+  router.post('/complaints', async (req, res, next) => {
+    try {
+      const { id, table, note, source, createdAt } = req.body;
+      if (!table) return res.status(400).json({ error: 'Mesa requerida.' });
+      const record = {
+        id: id || crypto.randomUUID(),
+        table: Number(table),
+        note: note || '',
+        source: source || 'customer',
+        hasPhoto: Boolean(req.body.hasPhoto),
+        createdAt: createdAt || new Date().toISOString(),
+      };
+      await kvHset('complaints', record.id, record);
+
+      // Notify kitchen via push
+      if (vapidKeys) {
+        const pushTitle = source === 'customer' ? 'GastroPulse · Queja de cliente' : 'GastroPulse · Incidencia';
+        const pushBody  = `Mesa ${table}: ${note || 'El cliente reportó un problema.'}`;
+        sendPushToAll(webpush, pushTitle, pushBody, '/').catch(() => null);
+      }
+
+      res.status(201).json(record);
+    } catch (err) { next(err); }
+  });
+
+  // ── Complaints: list ──────────────────────────────────────────────────────
+  router.get('/complaints', async (_req, res, next) => {
+    try {
+      const all = await kvHgetall('complaints');
+      const sorted = all.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      res.json(sorted);
+    } catch (err) { next(err); }
+  });
+
+  // ── Complaints: delete ────────────────────────────────────────────────────
+  router.delete('/complaints/:id', async (req, res, next) => {
+    try {
+      await kvHdel('complaints', req.params.id);
+      res.json({ deleted: req.params.id });
+    } catch (err) { next(err); }
   });
 
   return router;

@@ -358,7 +358,32 @@ async function refreshIncidentBadge() {
 async function renderIncidents() {
   let incidents = [];
   try {
-    incidents = (await getAll('incidencias'))
+    // Always read local IndexedDB (has photos)
+    const local = await getAll('incidencias');
+
+    // Merge with server complaints (visible across devices)
+    let server = [];
+    if (navigator.onLine) {
+      try {
+        const res = await fetch('/api/complaints');
+        if (res.ok) server = await res.json();
+      } catch (_) { /* offline */ }
+    }
+
+    // Merge: server records take precedence, local adds photos
+    const merged = new Map();
+    server.forEach((s) => merged.set(s.id, { ...s, photoDataUrl: null }));
+    local.forEach((l) => {
+      if (merged.has(l.id)) {
+        // Enrich server record with local photo
+        merged.set(l.id, { ...merged.get(l.id), photoDataUrl: l.photoDataUrl });
+      } else {
+        // Local-only (offline or staff incident)
+        merged.set(l.id, l);
+      }
+    });
+
+    incidents = [...merged.values()]
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   } catch (err) {
     console.error('Error leyendo incidencias:', err);
@@ -369,13 +394,12 @@ async function renderIncidents() {
   document.querySelector('#incident-count').textContent = count;
 
   const board = document.querySelector('#incidents-board');
-
   if (!count) {
     board.innerHTML = `
       <div class="incidents-empty">
         <span class="incidents-empty-icon">📷</span>
         <p>No hay incidencias registradas.</p>
-        <small>Usa el botón "📷 Incidencia" en una comanda para registrar un problema.</small>
+        <small>Usa el botón "📷 Incidencia" en una comanda o "Reportar problema" en la vista Cliente.</small>
       </div>`;
     return;
   }
@@ -385,12 +409,15 @@ async function renderIncidents() {
     const badge = isCustomer
       ? `<span class="incident-source-badge source-customer">CLIENTE</span>`
       : `<span class="incident-source-badge source-staff">COCINA</span>`;
+    const serverOnlyNote = !inc.photoDataUrl && inc.hasPhoto
+      ? `<p class="incident-note" style="color:var(--accent)">📷 Foto guardada en el dispositivo del cliente</p>`
+      : '';
     return `
     <article class="incident-card${isCustomer ? ' incident-customer' : ''}" data-incident-id="${inc.id}">
       <div class="incident-photo">
         ${inc.photoDataUrl
           ? `<img src="${inc.photoDataUrl}" alt="Foto incidencia Mesa ${inc.table}" />`
-          : `<div class="incident-no-photo"><span>📷</span><small>Sin foto</small></div>`}
+          : `<div class="incident-no-photo"><span>${inc.hasPhoto ? '🖼' : '📷'}</span><small>${inc.hasPhoto ? 'Foto en dispositivo cliente' : 'Sin foto'}</small></div>`}
         ${badge}
       </div>
       <div class="incident-info">
@@ -398,8 +425,9 @@ async function renderIncidents() {
         <strong class="incident-time">${formatTime(inc.createdAt)}</strong>
         <small class="incident-date">${new Date(inc.createdAt).toLocaleDateString('es-CO', { day:'2-digit', month:'short', year:'numeric' })}</small>
         ${inc.note ? `<p class="incident-note">"${inc.note}"</p>` : ''}
+        ${serverOnlyNote}
       </div>
-      <button class="incident-delete" data-delete="${inc.id}" aria-label="Eliminar incidencia">✕</button>
+      <button class="incident-delete" data-delete="${inc.id}" data-server="${isCustomer}" aria-label="Eliminar incidencia">✕</button>
     </article>`;
   }).join('');
 }
@@ -407,7 +435,14 @@ async function renderIncidents() {
 document.querySelector('#incidents-board').addEventListener('click', async (e) => {
   const delBtn = e.target.closest('[data-delete]');
   if (!delBtn) return;
-  await removeIncident(delBtn.dataset.delete);
+  const id = delBtn.dataset.delete;
+  const isServer = delBtn.dataset.server === 'true';
+  // Remove locally
+  await removeIncident(id).catch(() => null);
+  // Remove from server if it was synced
+  if (isServer && navigator.onLine) {
+    fetch(`/api/complaints/${id}`, { method: 'DELETE' }).catch(() => null);
+  }
   showToast('Incidencia eliminada.');
   renderIncidents();
   refreshIncidentBadge();
@@ -415,8 +450,20 @@ document.querySelector('#incidents-board').addEventListener('click', async (e) =
 
 document.querySelector('#clear-incidents').addEventListener('click', async () => {
   if (!confirm('¿Borrar todas las incidencias?')) return;
-  const incidents = await getAll('incidencias');
-  for (const inc of incidents) await removeIncident(inc.id);
+  const local = await getAll('incidencias');
+  for (const inc of local) await removeIncident(inc.id).catch(() => null);
+  // Also clear server complaints
+  if (navigator.onLine) {
+    try {
+      const res = await fetch('/api/complaints');
+      if (res.ok) {
+        const serverList = await res.json();
+        await Promise.allSettled(
+          serverList.map((c) => fetch(`/api/complaints/${c.id}`, { method: 'DELETE' }))
+        );
+      }
+    } catch (_) { /* best effort */ }
+  }
   showToast('Todas las incidencias eliminadas.');
   renderIncidents();
   refreshIncidentBadge();
@@ -561,19 +608,22 @@ function startWaitTimerFromTimestamp(table, startTs) {
     const btn = document.querySelector('#wait-report-btn');
     btn.disabled = true;
     try {
-      await saveIncident({
+      const localInc = await saveIncident({
         table,
         note: `Pedido no llegó pasados ${WAIT_MINUTES} minutos.`,
         source: 'customer',
       });
       if (navigator.onLine) {
-        fetch('/api/push/kitchen-ready', {
+        fetch('/api/complaints', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
-            table,
-            title: 'GastroPulse · Pedido no entregado',
-            body: `Mesa ${table}: el cliente indica que su pedido no ha llegado.`,
+            id: localInc.id,
+            table: localInc.table,
+            note: localInc.note,
+            source: localInc.source,
+            hasPhoto: false,
+            createdAt: localInc.createdAt,
           }),
         }).catch(() => null);
       }
@@ -698,21 +748,26 @@ function initComplaintFlow() {
     statusEl.className = 'complaint-status hidden';
 
     try {
-      await saveIncident({
+      const localIncident = await saveIncident({
         table: Number(tableSelect.value),
         photoDataUrl: capturedDataUrl,
         note,
         source: 'customer',
       });
 
+      // Send metadata to server so kitchen sees it on any device/tab.
+      // Photo stays in local IndexedDB (too large for KV).
       if (navigator.onLine) {
-        fetch('/api/push/kitchen-ready', {
+        fetch('/api/complaints', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
-            table: Number(tableSelect.value),
-            title: 'GastroPulse · Queja de cliente',
-            body: `Mesa ${tableSelect.value}: ${note || 'El cliente reportó un problema.'}`,
+            id: localIncident.id,
+            table: localIncident.table,
+            note: localIncident.note,
+            source: localIncident.source,
+            hasPhoto: Boolean(capturedDataUrl),
+            createdAt: localIncident.createdAt,
           }),
         }).catch(() => null);
       }
