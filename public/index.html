@@ -64,7 +64,7 @@
           <button id="qr-cancel" class="secondary-button">Cancelar</button>
         </div>
 
-        <div id="order-status" class="notice">
+        <div id="order-status" class="notice" style="display:none">
           <span class="notice-icon">↯</span>
           <span>
             <strong>Offline · Guardado en IndexedDB</strong>
@@ -81,19 +81,24 @@
         </div>
         <div id="menu-grid" class="menu-grid"></div>
 
+        <!-- Voice card -->
         <div class="voice-card">
           <div class="voice-copy">
             <span class="eyebrow">MANOS LIBRES</span>
             <h2>Di tu comanda</h2>
-            <p>"Mesa 4, dos cervezas y una hamburguesa sin cebolla"</p>
+            <p id="voice-hint">"Mesa 4, dos cervezas y una hamburguesa sin cebolla"</p>
           </div>
-          <button id="voice-button" class="voice-button" aria-label="Dictar comanda"><span>●</span></button>
+          <button id="voice-button" class="voice-button" aria-label="Dictar comanda" title="Dictar con Web Speech API">
+            <span>●</span>
+          </button>
         </div>
+        <!-- Live transcript feedback -->
+        <div id="voice-transcript" class="voice-transcript hidden" aria-live="polite"></div>
 
         <div class="order-draft">
           <div class="section-heading">
             <h2>Borrador · Mesa <span id="draft-table">5</span></h2>
-            <span id="draft-total" class="total">€0,00</span>
+            <span id="draft-total" class="total">$0</span>
           </div>
           <div id="draft-items" class="draft-items">
             <p class="empty-state">Añade productos o dicta tu comanda.</p>
@@ -111,11 +116,34 @@
           </div>
           <span class="live-dot">● EN VIVO</span>
         </div>
-        <div class="kds-summary">
-          <span><strong id="incoming-count">0</strong> comandas activas</span>
-          <span class="muted" id="kds-last-update">—</span>
+
+        <!-- KDS tabs -->
+        <div class="kds-tabs" role="tablist">
+          <button class="kds-tab active" data-tab="orders" role="tab" aria-selected="true">
+            Comandas <span id="nav-kitchen-count" class="tab-badge">0</span>
+          </button>
+          <button class="kds-tab" data-tab="incidents" role="tab" aria-selected="false">
+            Incidencias <span id="incident-count" class="tab-badge">0</span>
+          </button>
         </div>
-        <div id="kds-board" class="kds-board"></div>
+
+        <!-- Comandas panel -->
+        <div id="kds-orders-panel" class="kds-panel">
+          <div class="kds-summary">
+            <span><strong id="incoming-count">0</strong> comandas activas</span>
+            <span class="muted" id="kds-last-update">—</span>
+          </div>
+          <div id="kds-board" class="kds-board"></div>
+        </div>
+
+        <!-- Incidencias panel -->
+        <div id="kds-incidents-panel" class="kds-panel hidden">
+          <div class="kds-summary">
+            <span><strong id="incidents-total">0</strong> incidencias registradas</span>
+            <button id="clear-incidents" class="text-button">Borrar todas</button>
+          </div>
+          <div id="incidents-board" class="incidents-board"></div>
+        </div>
       </section>
 
       <!-- ── Cliente ────────────────────────────────────────────────────── -->
@@ -131,7 +159,7 @@
           <span class="check" id="verify-icon">⟳</span>
           <div>
             <strong id="verify-label">Verificando ubicación…</strong>
-            <small id="verify-detail">Comprobando GPS y red local · Mesa <span id="customer-table">5</span></small>
+            <small id="verify-detail">Comprobando GPS · Mesa <span id="customer-table">5</span></small>
           </div>
           <button id="verify-location-btn" class="secondary-button">Verificar ahora</button>
         </div>
@@ -141,7 +169,8 @@
           <strong>Pulsa para pedir</strong>
           <small>Habla con naturalidad, te estamos escuchando</small>
         </button>
-        <button id="customer-menu" class="secondary-button full-width">Ver menú completo</button>
+        <div id="customer-transcript" class="voice-transcript hidden" aria-live="polite"></div>
+        <button id="customer-menu" class="secondary-button full-width" style="margin-top:16px">Ver menú completo</button>
       </section>
 
       <!-- ── Caminante banner ───────────────────────────────────────────── -->
@@ -156,11 +185,21 @@
         </div>
         <button id="dismiss-delivery" class="icon-button" aria-label="Cerrar">×</button>
       </section>
+
+      <!-- ── Incident capture overlay ───────────────────────────────────── -->
+      <div id="incident-overlay" class="incident-overlay hidden" role="dialog" aria-label="Capturar incidencia">
+        <div class="incident-frame">
+          <p class="eyebrow" style="color:#fff;text-align:center;margin-bottom:8px">CAPTURANDO FOTO…</p>
+          <video id="incident-video" playsinline muted autoplay></video>
+          <div class="incident-countdown" id="incident-countdown">3</div>
+        </div>
+        <button id="incident-cancel" class="secondary-button">Cancelar</button>
+      </div>
     </main>
 
     <nav class="bottom-nav" aria-label="Navegación principal">
       <button class="nav-item active" data-view="waiter-view"><span>⌂</span><small>Mesero</small></button>
-      <button class="nav-item" data-view="kitchen-view"><span>▤</span><small>Cocina <b id="nav-kitchen-count">0</b></small></button>
+      <button class="nav-item" data-view="kitchen-view"><span>▤</span><small>Cocina <b id="nav-badge">0</b></small></button>
       <button class="nav-item" data-view="customer-view"><span>♧</span><small>Cliente</small></button>
     </nav>
 

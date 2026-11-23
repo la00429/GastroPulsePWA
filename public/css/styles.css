@@ -19,3 +19,33 @@
 .customer-voice:disabled{opacity:.5;cursor:not-allowed}
 /* ── KDS empty state ─────────────────────────────────────────────────── */
 .kds-card[data-ready-sent] .ready-button{background:var(--muted);cursor:not-allowed}
+
+/* ── Live voice transcript ───────────────────────────────────────────── */
+.voice-transcript{background:#1a2530;color:#e2f0ea;border-radius:8px;padding:10px 14px;font-size:13px;margin-top:10px;min-height:36px;transition:.2s}
+.voice-transcript.hidden{display:none}
+.voice-transcript.error{background:#3b1c1c;color:#f4a0a0}
+/* ── KDS tabs ────────────────────────────────────────────────────────── */
+.kds-tabs{display:flex;gap:8px;margin:20px 0 0;border-bottom:2px solid var(--line)}
+.kds-tab{background:none;padding:10px 18px;font-weight:700;font-size:13px;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;border-radius:0;transition:.15s}
+.kds-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.tab-badge{background:var(--danger);color:#fff;font-size:9px;padding:2px 5px;border-radius:8px;margin-left:5px;vertical-align:middle}
+.kds-tab.active .tab-badge{background:var(--accent)}
+.kds-panel{margin-top:0}
+.kds-panel.hidden{display:none}
+/* ── Incidents board ─────────────────────────────────────────────────── */
+.incidents-board{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;margin-top:16px}
+.incident-card{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:var(--shadow);display:flex;flex-direction:column;position:relative}
+.incident-photo{width:100%;aspect-ratio:16/9;background:var(--surface-2);overflow:hidden}
+.incident-photo img{width:100%;height:100%;object-fit:cover}
+.incident-no-photo{display:grid;place-items:center;height:100%;color:var(--muted);font-size:12px}
+.incident-info{padding:12px 14px}
+.incident-info strong{font-size:16px;display:block;margin:2px 0}
+.incident-info small{color:var(--muted);font-size:11px}
+.incident-note{font-size:12px;color:var(--muted);margin:6px 0 0}
+.incident-delete{position:absolute;top:8px;right:8px;background:#00000080;color:#fff;border-radius:50%;width:26px;height:26px;font-size:13px;display:grid;place-items:center}
+/* ── Incident capture overlay ────────────────────────────────────────── */
+.incident-overlay{position:fixed;inset:0;z-index:30;background:#000d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px}
+.incident-overlay.hidden{display:none}
+.incident-frame{position:relative;width:min(380px,92vw)}
+.incident-frame video{width:100%;border-radius:12px;display:block}
+.incident-countdown{position:absolute;inset:0;display:grid;place-items:center;font-size:72px;font-weight:900;color:#fff;text-shadow:0 2px 12px #0008;pointer-events:none}

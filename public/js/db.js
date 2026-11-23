@@ -1,6 +1,6 @@
 const DB_NAME = 'gastropulse-db';
-const DB_VERSION = 2;
-const STORES = ['menu', 'comandas', 'sync_queue'];
+const DB_VERSION = 3; // bumped: añade store 'incidencias'
+const STORES = ['menu', 'comandas', 'sync_queue', 'incidencias'];
 
 const defaultMenu = [
   { id: 'hamburguesa', name: 'Hamburguesa clásica', description: 'Carne, queso, tomate y patatas', priceCOP: 49500, priceUSD: 12.5, emoji: '🍔' },
@@ -8,7 +8,7 @@ const defaultMenu = [
   { id: 'bravas', name: 'Patatas bravas', description: 'Salsa brava y alioli', priceCOP: 28000, priceUSD: 7, emoji: '🍟' },
   { id: 'ensalada', name: 'Ensalada de temporada', description: 'Verde, tomate y vinagreta', priceCOP: 36000, priceUSD: 9, emoji: '🥗' },
   { id: 'tarta', name: 'Tarta de queso', description: 'Cremosa, con frutos rojos', priceCOP: 24000, priceUSD: 6, emoji: '🍰' },
-  { id: 'agua', name: 'Agua mineral', description: 'Botella 50 cl', priceCOP: 8000, priceUSD: 2, emoji: '💧' }
+  { id: 'agua', name: 'Agua mineral', description: 'Botella 50 cl', priceCOP: 8000, priceUSD: 2, emoji: '💧' },
 ];
 
 function requestToPromise(request) {
@@ -21,11 +21,11 @@ function requestToPromise(request) {
 export function openDatabase() {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
-    request.onupgradeneeded = () => {
-      const database = request.result;
+    request.onupgradeneeded = (event) => {
+      const db = request.result;
       STORES.forEach((store) => {
-        if (!database.objectStoreNames.contains(store)) {
-          database.createObjectStore(store, { keyPath: 'id' });
+        if (!db.objectStoreNames.contains(store)) {
+          db.createObjectStore(store, { keyPath: 'id' });
         }
       });
     };
@@ -35,45 +35,85 @@ export function openDatabase() {
 }
 
 export async function getAll(storeName) {
-  const database = await openDatabase();
-  return requestToPromise(database.transaction(storeName, 'readonly').objectStore(storeName).getAll());
+  const db = await openDatabase();
+  return requestToPromise(db.transaction(storeName, 'readonly').objectStore(storeName).getAll());
 }
 
 export async function put(storeName, value) {
-  const database = await openDatabase();
-  return requestToPromise(database.transaction(storeName, 'readwrite').objectStore(storeName).put(value));
+  const db = await openDatabase();
+  return requestToPromise(db.transaction(storeName, 'readwrite').objectStore(storeName).put(value));
 }
 
 export async function remove(storeName, id) {
-  const database = await openDatabase();
-  return requestToPromise(database.transaction(storeName, 'readwrite').objectStore(storeName).delete(id));
+  const db = await openDatabase();
+  return requestToPromise(db.transaction(storeName, 'readwrite').objectStore(storeName).delete(id));
 }
 
 export async function seedMenu() {
-  const existingItems = await getAll('menu');
-  if (existingItems.length === 0 || existingItems.some((item) => !item.priceCOP || !item.priceUSD)) {
-    const database = await openDatabase();
-    const transaction = database.transaction('menu', 'readwrite');
-    defaultMenu.forEach((item) => transaction.objectStore('menu').put(item));
-    await new Promise((resolve, reject) => { transaction.oncomplete = resolve; transaction.onerror = () => reject(transaction.error); });
+  const existing = await getAll('menu');
+  if (existing.length === 0 || existing.some((item) => !item.priceCOP || !item.priceUSD)) {
+    const db = await openDatabase();
+    const tx = db.transaction('menu', 'readwrite');
+    defaultMenu.forEach((item) => tx.objectStore('menu').put(item));
+    await new Promise((resolve, reject) => {
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
   }
   return getAll('menu');
 }
 
 export async function saveOrder(order) {
-  const storedOrder = { ...order, id: order.id || crypto.randomUUID(), updatedAt: new Date().toISOString() };
-  await put('comandas', storedOrder);
-  await put('sync_queue', { id: crypto.randomUUID(), type: 'CREATE_ORDER', payload: storedOrder, createdAt: new Date().toISOString() });
-  return storedOrder;
+  const stored = {
+    ...order,
+    id: order.id || crypto.randomUUID(),
+    updatedAt: new Date().toISOString(),
+  };
+  await put('comandas', stored);
+  await put('sync_queue', {
+    id: crypto.randomUUID(),
+    type: 'CREATE_ORDER',
+    payload: stored,
+    createdAt: new Date().toISOString(),
+  });
+  return stored;
+}
+
+export async function saveIncident(incident) {
+  const stored = {
+    id: crypto.randomUUID(),
+    table: incident.table,
+    photoDataUrl: incident.photoDataUrl || null,
+    note: incident.note || '',
+    createdAt: new Date().toISOString(),
+  };
+  await put('incidencias', stored);
+  // Also queue for server sync (best-effort)
+  await put('sync_queue', {
+    id: crypto.randomUUID(),
+    type: 'INCIDENT',
+    payload: { id: stored.id, table: stored.table, note: stored.note, createdAt: stored.createdAt },
+    createdAt: stored.createdAt,
+  });
+  return stored;
+}
+
+export async function removeIncident(id) {
+  return remove('incidencias', id);
 }
 
 export async function queueIncident(incident) {
-  return put('sync_queue', { id: crypto.randomUUID(), type: 'INCIDENT', payload: incident, createdAt: new Date().toISOString() });
+  return put('sync_queue', {
+    id: crypto.randomUUID(),
+    type: 'INCIDENT',
+    payload: incident,
+    createdAt: new Date().toISOString(),
+  });
 }
 
 export async function getDraft(table) {
   const orders = await getAll('comandas');
-  return orders.find((order) => order.table === Number(table) && order.status === 'draft');
+  return orders.find((o) => o.table === Number(table) && o.status === 'draft');
 }
 
 export async function clearDraft(table) {
