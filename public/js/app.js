@@ -95,16 +95,47 @@ menuGrid.addEventListener('click', (e) => {
 function renderDraft() {
   document.querySelector('#draft-table').textContent = tableSelect.value;
   draftItemsEl.innerHTML = draft.length
-    ? draft.map((item) => `
+    ? draft.map((item, idx) => `
         <div class="draft-line">
-          <span><b>${item.quantity}×</b> ${item.name}
-            ${item.notes ? `<small>${item.notes}</small>` : ''}
-          </span>
-          <strong>${money(item.price * item.quantity)}</strong>
+          <div class="draft-line-info">
+            <span class="draft-name">${item.name}</span>
+            ${item.notes ? `<small class="draft-notes">${item.notes}</small>` : ''}
+          </div>
+          <div class="draft-line-controls">
+            <button class="draft-qty-btn" data-action="dec" data-idx="${idx}" aria-label="Reducir cantidad">−</button>
+            <span class="draft-qty">${item.quantity}</span>
+            <button class="draft-qty-btn" data-action="inc" data-idx="${idx}" aria-label="Aumentar cantidad">+</button>
+            <span class="draft-subtotal">${money(item.price * item.quantity)}</span>
+            <button class="draft-remove" data-action="remove" data-idx="${idx}" aria-label="Eliminar ${item.name}">✕</button>
+          </div>
         </div>`).join('')
     : '<p class="empty-state">Añade productos o dicta tu comanda.</p>';
   draftTotalEl.textContent = money(draft.reduce((s, i) => s + i.price * i.quantity, 0));
 }
+
+// Delegated handler for draft item controls
+draftItemsEl.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  const idx = Number(btn.dataset.idx);
+  const action = btn.dataset.action;
+  if (action === 'inc') {
+    draft[idx].quantity += 1;
+    vibrate(25);
+  } else if (action === 'dec') {
+    if (draft[idx].quantity > 1) {
+      draft[idx].quantity -= 1;
+      vibrate(25);
+    } else {
+      draft.splice(idx, 1); // remove when reaches 0
+      vibrate([40, 20]);
+    }
+  } else if (action === 'remove') {
+    draft.splice(idx, 1);
+    vibrate([40, 20]);
+  }
+  renderDraft();
+});
 
 // ── Submit order ──────────────────────────────────────────────────────────
 async function submitOrder() {
@@ -293,15 +324,27 @@ async function refreshIncidentBadge() {
 }
 
 async function renderIncidents() {
-  const incidents = (await getAll('incidencias'))
-    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  let incidents = [];
+  try {
+    incidents = (await getAll('incidencias'))
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  } catch (err) {
+    console.error('Error leyendo incidencias:', err);
+  }
 
-  document.querySelector('#incidents-total').textContent = incidents.length;
-  document.querySelector('#incident-count').textContent = incidents.length;
+  const count = incidents.length;
+  document.querySelector('#incidents-total').textContent = count;
+  document.querySelector('#incident-count').textContent = count;
 
   const board = document.querySelector('#incidents-board');
-  if (!incidents.length) {
-    board.innerHTML = '<p class="empty-state" style="padding:2rem 0">No hay incidencias registradas.</p>';
+
+  if (!count) {
+    board.innerHTML = `
+      <div class="incidents-empty">
+        <span class="incidents-empty-icon">📷</span>
+        <p>No hay incidencias registradas.</p>
+        <small>Usa el botón "📷 Incidencia" en una comanda para registrar un problema.</small>
+      </div>`;
     return;
   }
 
@@ -309,14 +352,15 @@ async function renderIncidents() {
     <article class="incident-card" data-incident-id="${inc.id}">
       <div class="incident-photo">
         ${inc.photoDataUrl
-          ? `<img src="${inc.photoDataUrl}" alt="Foto incidencia Mesa ${inc.table}" loading="lazy" />`
-          : '<div class="incident-no-photo">Sin foto</div>'}
+          ? `<img src="${inc.photoDataUrl}" alt="Foto incidencia Mesa ${inc.table}" />`
+          : `<div class="incident-no-photo"><span>📷</span><small>Sin foto</small></div>`}
       </div>
       <div class="incident-info">
-        <p class="eyebrow">MESA ${inc.table}</p>
-        <strong>${formatTime(inc.createdAt)}</strong>
-        <small>${new Date(inc.createdAt).toLocaleDateString('es-CO')}</small>
-        ${inc.note ? `<p class="incident-note">${inc.note}</p>` : ''}
+        <span class="role-chip role-kitchen" style="font-size:9px;padding:2px 7px">COCINA</span>
+        <p class="eyebrow" style="margin-top:6px">MESA ${inc.table}</p>
+        <strong class="incident-time">${formatTime(inc.createdAt)}</strong>
+        <small class="incident-date">${new Date(inc.createdAt).toLocaleDateString('es-CO', { day:'2-digit', month:'short', year:'numeric' })}</small>
+        ${inc.note ? `<p class="incident-note">"${inc.note}"</p>` : ''}
       </div>
       <button class="incident-delete" data-delete="${inc.id}" aria-label="Eliminar incidencia">✕</button>
     </article>`).join('');
@@ -377,29 +421,45 @@ async function startLocationVerification() {
   verifyCard.className = 'verification-card unverified';
   verifyIcon.textContent = '⟳';
   verifyLabel.textContent = 'Verificando ubicación…';
-  verifyDetail.innerHTML = `Comprobando GPS · Mesa <span id="customer-table">${tableSelect.value}</span>`;
+  verifyDetail.innerHTML = `Buscando señal GPS · puede tardar unos segundos`;
+  document.querySelector('#verify-location-btn').disabled = true;
+  document.querySelector('#verify-location-btn').textContent = 'Verificando…';
   customerVoiceBtn.disabled = true;
   try {
     const { verified, distance } = await sensors.verifyLocation(RESTAURANT_COORDS, PERIMETER_RADIUS_M);
     if (verified) {
       verifyCard.className = 'verification-card verified';
       verifyIcon.textContent = '✓';
-      verifyLabel.textContent = 'Ubicación verificada';
-      verifyDetail.innerHTML = `Dentro de GastroPulse · Mesa <span id="customer-table">${tableSelect.value}</span>`;
+      verifyLabel.textContent = 'Ubicación verificada · listo para pedir';
+      verifyDetail.innerHTML = `Estás dentro del restaurante · Mesa ${tableSelect.value}`;
       customerVoiceBtn.disabled = false;
+      document.querySelector('#customer-voice-hint').textContent = 'Di tu pedido y te lo preparamos al instante.';
     } else {
-      setVerifyFailed(`Estás a ${Math.round(distance)} m (máx. ${PERIMETER_RADIUS_M} m).`);
+      setVerifyFailed(
+        `Estás a ${Math.round(distance)} m del restaurante.`,
+        `El pedido por voz requiere estar dentro del local (máx. ${PERIMETER_RADIUS_M} m).`
+      );
     }
   } catch (err) {
-    setVerifyFailed(err.message);
+    if (err.message.includes('denied') || err.message.includes('PERMISSION')) {
+      setVerifyFailed(
+        'Permiso de ubicación denegado.',
+        'Ve a Configuración del navegador → Permisos → Ubicación y permite el acceso.'
+      );
+    } else {
+      setVerifyFailed('No se pudo obtener ubicación.', err.message);
+    }
+  } finally {
+    document.querySelector('#verify-location-btn').disabled = false;
+    document.querySelector('#verify-location-btn').textContent = 'Reintentar';
   }
 }
 
-function setVerifyFailed(reason) {
+function setVerifyFailed(title, detail = '') {
   verifyCard.className = 'verification-card failed';
   verifyIcon.textContent = '✗';
-  verifyLabel.textContent = 'Verificación fallida';
-  verifyDetail.textContent = reason;
+  verifyLabel.textContent = title;
+  verifyDetail.textContent = detail;
   customerVoiceBtn.disabled = true;
 }
 
