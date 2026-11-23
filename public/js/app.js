@@ -138,9 +138,15 @@ draftItemsEl.addEventListener('click', (e) => {
 });
 
 // ── Submit order ──────────────────────────────────────────────────────────
-async function submitOrder() {
+async function submitOrder(source = 'waiter') {
   if (!draft.length) return showToast('Añade al menos un producto.');
-  await saveOrder({ table: Number(tableSelect.value), items: draft, currency: currencySelect.value, status: 'pending', source: 'waiter' });
+  const order = await saveOrder({
+    table: Number(tableSelect.value),
+    items: draft,
+    currency: currencySelect.value,
+    status: 'pending',
+    source,
+  });
   draft = [];
   renderDraft();
   showToast('Comanda guardada y enviada a cocina. ✓');
@@ -149,6 +155,11 @@ async function submitOrder() {
     const reg = await navigator.serviceWorker.ready;
     reg.sync?.register('gastropulse-sync').catch(() => null);
   }
+  // Start wait timer whenever a customer submits their own order
+  if (source === 'customer') {
+    startWaitTimer(Number(tableSelect.value));
+  }
+  return order;
 }
 
 // ── Navigation ────────────────────────────────────────────────────────────
@@ -156,7 +167,26 @@ function setView(viewId) {
   document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === viewId));
   document.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.view === viewId));
   if (viewId === 'kitchen-view') renderKitchen();
-  if (viewId === 'customer-view') startLocationVerification();
+  if (viewId === 'customer-view') {
+    startLocationVerification();
+    checkPendingOrderTimer();
+  }
+}
+
+// If the customer has a recent pending order, resume the wait timer
+async function checkPendingOrderTimer() {
+  const all = await getAll('comandas');
+  const table = Number(tableSelect.value);
+  const recent = all
+    .filter((o) => o.table === table && o.status === 'pending' && o.source === 'customer')
+    .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))[0];
+  if (!recent) return;
+  const ageMs = Date.now() - new Date(recent.updatedAt).getTime();
+  const totalMs = WAIT_MINUTES * 60 * 1000;
+  if (ageMs < totalMs * 1.5) {
+    // Resume timer based on when the order was placed
+    startWaitTimerFromTimestamp(table, new Date(recent.updatedAt).getTime());
+  }
 }
 
 // ── KDS tabs ──────────────────────────────────────────────────────────────
@@ -471,6 +501,91 @@ function setVerifyFailed(title, detail = '') {
 
 document.querySelector('#verify-location-btn').addEventListener('click', startLocationVerification);
 
+// ── Order wait timer ──────────────────────────────────────────────────────
+const WAIT_MINUTES = 15;
+let waitInterval = null;
+
+function startWaitTimer(table) {
+  startWaitTimerFromTimestamp(table, Date.now());
+}
+
+function startWaitTimerFromTimestamp(table, startTs) {
+  const card        = document.querySelector('#wait-timer-card');
+  const fill        = document.querySelector('#wait-progress-fill');
+  const countdown   = document.querySelector('#wait-countdown');
+  const estimatedEl = document.querySelector('#wait-estimated');
+  const overdueEl   = document.querySelector('#wait-overdue');
+  const reportBtn   = document.querySelector('#wait-report-btn');
+  const reportedEl  = document.querySelector('#wait-reported');
+
+  clearInterval(waitInterval);
+  overdueEl.classList.add('hidden');
+  reportedEl.classList.add('hidden');
+  reportBtn.disabled = false;
+  reportBtn.classList.remove('hidden');
+
+  const totalMs = WAIT_MINUTES * 60 * 1000;
+  estimatedEl.textContent = `${WAIT_MINUTES} min`;
+  card.classList.remove('hidden');
+
+  function tick() {
+    const elapsed   = Date.now() - startTs;
+    const remaining = Math.max(0, totalMs - elapsed);
+    const pct       = Math.min(100, (elapsed / totalMs) * 100);
+
+    fill.style.width      = `${pct}%`;
+    fill.style.background = pct >= 100 ? 'var(--danger)' : pct > 70 ? 'var(--accent)' : 'var(--mint)';
+
+    const mins = String(Math.floor(remaining / 60000)).padStart(2, '0');
+    const secs = String(Math.floor((remaining % 60000) / 1000)).padStart(2, '0');
+    countdown.textContent  = remaining > 0 ? `${mins}:${secs}` : '¡Tiempo!';
+    countdown.style.color  = remaining === 0 ? 'var(--danger)' : '';
+
+    if (remaining === 0) {
+      clearInterval(waitInterval);
+      overdueEl.classList.remove('hidden');
+      vibrate([200, 100, 200]);
+      showToast('⏰ El tiempo estimado de tu pedido venció.');
+    }
+  }
+
+  tick();
+  waitInterval = setInterval(tick, 1000);
+
+  // Clone button to remove old listeners before adding a new one
+  const freshBtn = reportBtn.cloneNode(true);
+  reportBtn.parentNode.replaceChild(freshBtn, freshBtn); // no-op needed for reference
+  document.querySelector('#wait-report-btn').addEventListener('click', async () => {
+    const btn = document.querySelector('#wait-report-btn');
+    btn.disabled = true;
+    try {
+      await saveIncident({
+        table,
+        note: `Pedido no llegó pasados ${WAIT_MINUTES} minutos.`,
+        source: 'customer',
+      });
+      if (navigator.onLine) {
+        fetch('/api/push/kitchen-ready', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            table,
+            title: 'GastroPulse · Pedido no entregado',
+            body: `Mesa ${table}: el cliente indica que su pedido no ha llegado.`,
+          }),
+        }).catch(() => null);
+      }
+      document.querySelector('#wait-reported').classList.remove('hidden');
+      btn.classList.add('hidden');
+      vibrate([80, 40, 80]);
+      await refreshIncidentBadge();
+    } catch (err) {
+      btn.disabled = false;
+      showToast(`Error al enviar aviso: ${err.message}`);
+    }
+  }, { once: true });
+}
+
 // ── Customer complaint flow ───────────────────────────────────────────────
 function initComplaintFlow() {
   const photoBtn    = document.querySelector('#complaint-photo-btn');
@@ -646,7 +761,6 @@ function initVoice() {
       showToast('Usa Chrome para activar el dictado.');
     }
   });
-
   if (isVoiceSupported()) {
     document.querySelector('#voice-button').title = 'Dictar con Web Speech API';
   }

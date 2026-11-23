@@ -180,6 +180,31 @@
         <button id="customer-menu" class="secondary-button full-width" style="margin-top:16px">Ver menú completo</button>
 
         <!-- ── Reportar problema ───────────────────────────────────────── -->
+        <!-- Order wait timer — shown after customer submits an order -->
+        <div id="wait-timer-card" class="wait-timer-card hidden">
+          <div class="wait-timer-header">
+            <span class="wait-timer-icon">🍽</span>
+            <div>
+              <strong>Tu pedido está en preparación</strong>
+              <small>Tiempo estimado: <span id="wait-estimated">15 min</span></small>
+            </div>
+          </div>
+          <div class="wait-progress-wrap">
+            <div class="wait-progress-bar">
+              <div id="wait-progress-fill" class="wait-progress-fill"></div>
+            </div>
+            <span id="wait-countdown" class="wait-countdown">15:00</span>
+          </div>
+          <!-- Shown only after time expires -->
+          <div id="wait-overdue" class="wait-overdue hidden">
+            <p>El tiempo estimado ya pasó y tu pedido no ha llegado.</p>
+            <button id="wait-report-btn" class="danger-button full-width">
+              ⚠︎ No llegó mi pedido
+            </button>
+            <p id="wait-reported" class="wait-reported hidden">✓ Aviso enviado. Un mesero se acercará pronto.</p>
+          </div>
+        </div>
+
         <div class="complaint-section">
           <div class="complaint-header">
             <span class="complaint-icon">⚠︎</span>

@@ -124,3 +124,19 @@
 .source-staff{background:#3dbb95;color:#0d1117}
 /* Customer incident card gets a colored left border */
 .incident-customer{border-left:4px solid var(--danger)}
+
+/* ── Wait timer card ─────────────────────────────────────────────────── */
+.wait-timer-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-bottom:20px}
+.wait-timer-header{display:flex;gap:12px;align-items:center;margin-bottom:14px}
+.wait-timer-icon{font-size:26px;flex-shrink:0}
+.wait-timer-header strong{display:block;font-size:14px}
+.wait-timer-header small{font-size:12px;color:var(--muted)}
+.wait-progress-wrap{display:flex;align-items:center;gap:12px;margin-bottom:4px}
+.wait-progress-bar{flex:1;height:8px;background:var(--surface-2);border-radius:8px;overflow:hidden;border:1px solid var(--line)}
+.wait-progress-fill{height:100%;width:0%;border-radius:8px;transition:width .9s linear,background .5s}
+.wait-countdown{font-size:15px;font-weight:800;min-width:48px;text-align:right;font-variant-numeric:tabular-nums}
+.wait-overdue{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+.wait-overdue p{font-size:13px;color:var(--danger);margin:0 0 10px;font-weight:600}
+.danger-button{background:var(--danger);color:#fff;border-radius:9px;padding:12px 16px;font-weight:750;border:none;font-size:14px}
+.danger-button:disabled{opacity:.5;cursor:not-allowed}
+.wait-reported{margin-top:10px;font-size:13px;color:var(--mint);font-weight:600;text-align:center}
