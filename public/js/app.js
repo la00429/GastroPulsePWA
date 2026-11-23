@@ -503,10 +503,11 @@ const RESTAURANT_COORDS = { latitude: 5.5353, longitude: -73.3678 }; // UPTC Tun
 const PERIMETER_RADIUS_M = 200;
 
 async function startLocationVerification() {
+  const currentTable = tableSelect.value;   // snapshot at call time
   verifyCard.className = 'verification-card unverified';
   verifyIcon.textContent = '⟳';
   verifyLabel.textContent = 'Verificando ubicación…';
-  verifyDetail.innerHTML = `Buscando señal GPS · puede tardar unos segundos`;
+  verifyDetail.innerHTML = `Buscando señal GPS · Mesa ${currentTable}`;
   document.querySelector('#verify-location-btn').disabled = true;
   document.querySelector('#verify-location-btn').textContent = 'Verificando…';
   customerVoiceBtn.disabled = true;
@@ -516,7 +517,7 @@ async function startLocationVerification() {
       verifyCard.className = 'verification-card verified';
       verifyIcon.textContent = '✓';
       verifyLabel.textContent = 'Ubicación verificada · listo para pedir';
-      verifyDetail.innerHTML = `Estás dentro del restaurante · Mesa ${tableSelect.value}`;
+      verifyDetail.innerHTML = `Estás dentro del restaurante · Mesa ${currentTable}`;
       customerVoiceBtn.disabled = false;
       document.querySelector('#customer-voice-hint').textContent = 'Di tu pedido y te lo preparamos al instante.';
     } else {
@@ -983,12 +984,22 @@ async function init() {
   initComplaintFlow();
 
   // ── Handle URL params from QR scan (?view=customer&mesa=N) ──────────
+  // Must run AFTER sensors is initialized and AFTER all event listeners
   const params = new URLSearchParams(location.search);
   const qrMesa = params.get('mesa');
   const qrView = params.get('view');
-  if (qrMesa && tableSelect.querySelector(`option[value="${qrMesa}"]`)) {
+  if (qrMesa) {
+    // Add option dynamically if mesa number isn't in the predefined list
+    if (!tableSelect.querySelector(`option[value="${qrMesa}"]`)) {
+      const opt = document.createElement('option');
+      opt.value = qrMesa;
+      opt.textContent = `Mesa ${qrMesa}`;
+      tableSelect.appendChild(opt);
+    }
     tableSelect.value = qrMesa;
-    tableSelect.dispatchEvent(new Event('change'));
+    // Update all customer-table displays
+    document.querySelectorAll('#customer-table').forEach((el) => { el.textContent = qrMesa; });
+    renderDraft();
   }
   if (qrView === 'customer') setView('customer-view');
   else if (qrView === 'kitchen') setView('kitchen-view');
