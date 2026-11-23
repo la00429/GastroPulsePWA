@@ -32,10 +32,10 @@ function normalize(text) {
 
 // ── Main parser ────────────────────────────────────────────────────────────
 export function parseOrderSpeech(transcript, menu) {
-  const text = normalize(transcript);
+  const text  = normalize(transcript);
   const words = text.split(' ');
 
-  // Extract table number: "mesa 4", "mesa cuatro"
+  // ── Table number ──────────────────────────────────────────────────────
   let table = null;
   const tableIdx = words.indexOf('mesa');
   if (tableIdx !== -1 && words[tableIdx + 1]) {
@@ -48,31 +48,31 @@ export function parseOrderSpeech(transcript, menu) {
   menu.forEach((product) => {
     const productWords = normalize(product.name)
       .split(' ')
-      .filter((w) => w.length > 2); // ignore short words like "de", "la"
+      .filter((w) => w.length > 2);
 
-    // Check if any significant product word appears in the transcript
-    const matched = productWords.some((pw) => text.includes(pw));
-    if (!matched) return;
-
-    // Find quantity: look at the word(s) immediately before the first
-    // matched product keyword
+    // Find the first product keyword that appears in the transcript
     const firstKeyword = productWords.find((pw) => text.includes(pw));
-    const keywordIdx = words.indexOf(firstKeyword);
-    let quantity = 1;
+    if (!firstKeyword) return;
 
-    if (keywordIdx > 0) {
-      for (let offset = 1; offset <= 3; offset++) {
-        const candidate = words[keywordIdx - offset];
-        if (!candidate) break;
-        const digit = parseInt(candidate, 10);
-        if (!isNaN(digit)) { quantity = digit; break; }
-        if (WORD_NUMBERS[candidate]) { quantity = WORD_NUMBERS[candidate]; break; }
-      }
+    // ── Find quantity ─────────────────────────────────────────────────
+    // Strategy: find the char position of the keyword in the text,
+    // extract the substring before it, split into words, look back up to 3.
+    const keywordCharIdx = text.indexOf(firstKeyword);
+    const before = text.slice(0, keywordCharIdx).trim();
+    const beforeWords = before.split(' ').filter(Boolean);
+
+    let quantity = 1;
+    for (let offset = 1; offset <= 3; offset++) {
+      const candidate = beforeWords[beforeWords.length - offset];
+      if (!candidate) break;
+      // Skip connectors and stop words
+      if (['y', 'e', 'con', 'de', 'la', 'el', 'un', 'una'].includes(candidate)) continue;
+      const digit = parseInt(candidate, 10);
+      if (!isNaN(digit) && digit > 0) { quantity = digit; break; }
+      if (WORD_NUMBERS[candidate]) { quantity = WORD_NUMBERS[candidate]; break; }
     }
 
-    // Build notes from modifier phrases
     const notes = extractNotes(text, product);
-
     items.push({ productId: product.id, name: product.name, quantity, notes });
   });
 
