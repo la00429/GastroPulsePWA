@@ -952,7 +952,7 @@ async function init() {
     btn.addEventListener('click', () => setView(btn.dataset.view))
   );
 
-  document.querySelector('#send-order').addEventListener('click', submitOrder);
+  document.querySelector('#send-order').addEventListener('click', () => submitOrder('waiter'));
   document.querySelector('#clear-order').addEventListener('click', async () => {
     draft = [];
     await clearDraft(tableSelect.value);

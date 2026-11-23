@@ -65,8 +65,19 @@ export async function seedMenu() {
 
 export async function saveOrder(order) {
   const stored = {
-    ...order,
     id: order.id || crypto.randomUUID(),
+    table: Number(order.table),
+    items: (order.items || []).map((item) => ({
+      productId: String(item.productId),
+      name: String(item.name),
+      price: Number(item.price),
+      quantity: Number(item.quantity),
+      notes: String(item.notes || ''),
+    })),
+    currency: String(order.currency || 'COP'),
+    status: String(order.status || 'pending'),
+    source: String(order.source || 'waiter'),
+    createdAt: order.createdAt || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
   await put('comandas', stored);
