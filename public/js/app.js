@@ -198,7 +198,9 @@ document.querySelectorAll('.kds-tab').forEach((tab) => {
     const panel = tab.dataset.tab;
     document.querySelector('#kds-orders-panel').classList.toggle('hidden', panel !== 'orders');
     document.querySelector('#kds-incidents-panel').classList.toggle('hidden', panel !== 'incidents');
+    // Always refresh the incidents panel when switching to it
     if (panel === 'incidents') renderIncidents();
+    if (panel === 'orders') renderKitchen();
   });
 });
 
@@ -588,39 +590,55 @@ function startWaitTimerFromTimestamp(table, startTs) {
 
 // ── Customer complaint flow ───────────────────────────────────────────────
 function initComplaintFlow() {
-  const photoBtn    = document.querySelector('#complaint-photo-btn');
-  const sendBtn     = document.querySelector('#complaint-send-btn');
-  const retakeBtn   = document.querySelector('#complaint-retake');
-  const noteEl      = document.querySelector('#complaint-note');
-  const counterEl   = document.querySelector('#complaint-note-counter');
-  const previewWrap = document.querySelector('#complaint-preview');
-  const previewImg  = document.querySelector('#complaint-img');
-  const statusEl    = document.querySelector('#complaint-status');
+  const photoBtn       = document.querySelector('#complaint-photo-btn');
+  const sendBtn        = document.querySelector('#complaint-send-btn');
+  const retakeBtn      = document.querySelector('#complaint-retake');
+  const noteEl         = document.querySelector('#complaint-note');
+  const counterEl      = document.querySelector('#complaint-note-counter');
+  const previewWrap    = document.querySelector('#complaint-preview');
+  const previewImg     = document.querySelector('#complaint-img');
+  const liveVideo      = document.querySelector('#complaint-live-video');
+  const camControls    = document.querySelector('#complaint-cam-controls');
+  const captureNowBtn  = document.querySelector('#complaint-capture-now');
+  const camCancelBtn   = document.querySelector('#complaint-cam-cancel');
+  const statusEl       = document.querySelector('#complaint-status');
 
   let capturedDataUrl = null;
+  let activeStream    = null;
 
-  // Character counter
   noteEl.addEventListener('input', () => {
     counterEl.textContent = `${noteEl.value.length} / 200`;
+    updateSendBtn();
   });
 
-  // Enable send once we have a note OR a photo
   function updateSendBtn() {
     sendBtn.disabled = !capturedDataUrl && !noteEl.value.trim();
   }
-  noteEl.addEventListener('input', updateSendBtn);
 
-  // Take photo
+  function stopStream() {
+    if (activeStream) { activeStream.getTracks().forEach((t) => t.stop()); activeStream = null; }
+    liveVideo.srcObject = null;
+  }
+
+  // ── Open camera → show live preview ──────────────────────────────────
   photoBtn.addEventListener('click', async () => {
     photoBtn.disabled = true;
-    photoBtn.textContent = '⏳ Abriendo cámara…';
+    photoBtn.textContent = '⏳ Iniciando cámara…';
     try {
-      const result = await captureIncident({ captureDelayMs: 2500 });
-      capturedDataUrl = result.dataUrl;
-      previewImg.src = capturedDataUrl;
+      activeStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+      });
+      liveVideo.srcObject = activeStream;
+      liveVideo.muted = true;
+      await liveVideo.play();
+
+      // Show live video + controls, hide static img
       previewWrap.classList.remove('hidden');
-      photoBtn.textContent = '✓ Foto tomada';
-      updateSendBtn();
+      liveVideo.classList.remove('hidden');
+      previewImg.classList.add('hidden');
+      camControls.classList.remove('hidden');
+      retakeBtn.classList.add('hidden');
+      photoBtn.textContent = '📷 Tomar foto';
     } catch (err) {
       photoBtn.disabled = false;
       photoBtn.textContent = '📷 Tomar foto';
@@ -628,26 +646,56 @@ function initComplaintFlow() {
     }
   });
 
-  // Retake
-  retakeBtn.addEventListener('click', async () => {
-    capturedDataUrl = null;
+  // ── Capture frame manually ────────────────────────────────────────────
+  captureNowBtn.addEventListener('click', () => {
+    if (!activeStream) return;
+    const canvas = document.createElement('canvas');
+    canvas.width  = liveVideo.videoWidth  || 640;
+    canvas.height = liveVideo.videoHeight || 480;
+    canvas.getContext('2d').drawImage(liveVideo, 0, 0, canvas.width, canvas.height);
+    capturedDataUrl = canvas.toDataURL('image/jpeg', 0.82);
+    stopStream();
+
+    // Show static captured image
+    previewImg.src = capturedDataUrl;
+    previewImg.classList.remove('hidden');
+    liveVideo.classList.add('hidden');
+    camControls.classList.add('hidden');
+    retakeBtn.classList.remove('hidden');
+    photoBtn.textContent = '✓ Foto tomada';
+    updateSendBtn();
+  });
+
+  // ── Cancel camera without capturing ──────────────────────────────────
+  camCancelBtn.addEventListener('click', () => {
+    stopStream();
     previewWrap.classList.add('hidden');
+    liveVideo.classList.add('hidden');
+    camControls.classList.add('hidden');
+    photoBtn.disabled = false;
+    photoBtn.textContent = '📷 Tomar foto';
+  });
+
+  // ── Retake ────────────────────────────────────────────────────────────
+  retakeBtn.addEventListener('click', () => {
+    capturedDataUrl = null;
     previewImg.src = '';
+    previewImg.classList.add('hidden');
+    retakeBtn.classList.add('hidden');
     photoBtn.disabled = false;
     photoBtn.textContent = '📷 Tomar foto';
     updateSendBtn();
-    photoBtn.click();
+    photoBtn.click(); // reopen camera immediately
   });
 
-  // Send complaint
+  // ── Send complaint ────────────────────────────────────────────────────
   sendBtn.addEventListener('click', async () => {
     const note = noteEl.value.trim();
     if (!capturedDataUrl && !note) return;
-
+    stopStream();
     sendBtn.disabled = true;
     sendBtn.textContent = '⏳ Enviando…';
-    statusEl.className = 'complaint-status';
-    statusEl.textContent = '';
+    statusEl.className = 'complaint-status hidden';
 
     try {
       await saveIncident({
@@ -657,7 +705,6 @@ function initComplaintFlow() {
         source: 'customer',
       });
 
-      // Notify kitchen via push if possible
       if (navigator.onLine) {
         fetch('/api/push/kitchen-ready', {
           method: 'POST',
@@ -665,7 +712,7 @@ function initComplaintFlow() {
           body: JSON.stringify({
             table: Number(tableSelect.value),
             title: 'GastroPulse · Queja de cliente',
-            body: `Mesa ${tableSelect.value}: ${note || 'El cliente reportó un problema con su plato.'}`,
+            body: `Mesa ${tableSelect.value}: ${note || 'El cliente reportó un problema.'}`,
           }),
         }).catch(() => null);
       }
@@ -683,16 +730,13 @@ function initComplaintFlow() {
 
       statusEl.className = 'complaint-status success';
       statusEl.textContent = '✓ Tu queja fue recibida. El equipo la está revisando.';
-      statusEl.classList.remove('hidden');
       vibrate([80, 40, 80]);
       await refreshIncidentBadge();
-
     } catch (err) {
       sendBtn.disabled = false;
       sendBtn.textContent = 'Enviar queja →';
       statusEl.className = 'complaint-status error';
       statusEl.textContent = `No se pudo enviar: ${err.message}`;
-      statusEl.classList.remove('hidden');
     }
   });
 }
@@ -704,66 +748,73 @@ function showTranscript(el, text, isError = false) {
 }
 
 function initVoice() {
-  // Shared handler for both mesero and customer voice
-  function makeVoice(transcriptEl) {
-    return createVoiceController({
-      onState: (state, detail) => {
-        const voiceBtn = document.querySelector('#voice-button');
-        const isListening = state === 'listening';
-        voiceBtn.classList.toggle('listening', isListening);
-        customerVoiceBtn.classList.toggle('listening', isListening);
+  const voiceBtn = document.querySelector('#voice-button');
 
-        if (state === 'idle') showTranscript(transcriptEl, '');
-        if (state === 'error') {
-          showTranscript(transcriptEl, detail || 'Error de voz.', true);
-          showToast(detail || 'Error en reconocimiento de voz.');
-        }
-        if (state === 'unsupported') showToast('Dictado no disponible. Usa Chrome.');
-      },
-      onInterim: (partial) => {
-        showTranscript(transcriptEl, `🎤 ${partial}`);
-      },
-      onResult: (transcript) => {
-        showTranscript(transcriptEl, `✓ "${transcript}"`);
-        const parsed = parseOrderSpeech(transcript, menu);
-        if (!parsed.items.length) {
-          showToast('No reconocí productos. Intenta: "dos cervezas y una hamburguesa"');
-          return;
-        }
-        if (parsed.table) tableSelect.value = parsed.table;
-        parsed.items.forEach((item) => {
-          const product = menu.find((p) => p.id === item.productId);
-          if (!product) return;
-          const existing = draft.find((d) => d.productId === item.productId);
-          if (existing) existing.quantity += item.quantity;
-          else draft.push({ ...item, price: productPrice(product) });
-        });
-        renderDraft();
-        const summary = parsed.items.map((i) => `${i.quantity}× ${i.name}`).join(', ');
-        showToast(`Añadido: ${summary}`);
-        vibrate([50, 30, 50]);
-      },
-    });
-  }
+  // ── Waiter voice ──────────────────────────────────────────────────────
+  const waiterVoice = createVoiceController({
+    onState: (state, detail) => {
+      voiceBtn.classList.toggle('listening', state === 'listening');
+      if (state === 'idle') showTranscript(voiceTranscript, '');
+      if (state === 'error') { showTranscript(voiceTranscript, detail || 'Error de voz.', true); showToast(detail || 'Error en reconocimiento de voz.'); }
+      if (state === 'unsupported') showToast('Dictado no disponible. Usa Chrome.');
+    },
+    onInterim: (partial) => showTranscript(voiceTranscript, `🎤 ${partial}`),
+    onResult: (transcript) => {
+      showTranscript(voiceTranscript, `✓ "${transcript}"`);
+      const parsed = parseOrderSpeech(transcript, menu);
+      if (!parsed.items.length) { showToast('No reconocí productos. Intenta: "dos cervezas y una hamburguesa"'); return; }
+      if (parsed.table) tableSelect.value = parsed.table;
+      parsed.items.forEach((item) => {
+        const product = menu.find((p) => p.id === item.productId);
+        if (!product) return;
+        const existing = draft.find((d) => d.productId === item.productId);
+        if (existing) existing.quantity += item.quantity;
+        else draft.push({ ...item, price: productPrice(product) });
+      });
+      renderDraft();
+      showToast(`Añadido: ${parsed.items.map((i) => `${i.quantity}× ${i.name}`).join(', ')}`);
+      vibrate([50, 30, 50]);
+    },
+  });
 
-  const waiterVoice = makeVoice(voiceTranscript);
-  const customerVoiceCtrl = makeVoice(customerTranscript);
-
-  document.querySelector('#voice-button').addEventListener('click', () => {
+  voiceBtn.addEventListener('click', () => {
     if (waiterVoice.supported) waiterVoice.start();
     else showToast('Usa Chrome para activar el dictado.');
   });
 
-  customerVoiceBtn.addEventListener('click', () => {
-    if (customerVoiceCtrl.supported) {
-      customerVoiceCtrl.start();
-    } else {
-      showToast('Usa Chrome para activar el dictado.');
-    }
+  // ── Customer voice ────────────────────────────────────────────────────
+  const customerVoice = createVoiceController({
+    onState: (state, detail) => {
+      customerVoiceBtn.classList.toggle('listening', state === 'listening');
+      if (state === 'idle') showTranscript(customerTranscript, '');
+      if (state === 'error') { showTranscript(customerTranscript, detail || 'Error de voz.', true); showToast(detail || 'Error en reconocimiento de voz.'); }
+      if (state === 'unsupported') showToast('Dictado no disponible. Usa Chrome.');
+    },
+    onInterim: (partial) => showTranscript(customerTranscript, `🎤 ${partial}`),
+    onResult: async (transcript) => {
+      showTranscript(customerTranscript, `✓ "${transcript}"`);
+      const parsed = parseOrderSpeech(transcript, menu);
+      if (!parsed.items.length) { showToast('No reconocí productos. Di por ejemplo: "dos cervezas"'); return; }
+      // Add to draft and auto-submit as customer order
+      parsed.items.forEach((item) => {
+        const product = menu.find((p) => p.id === item.productId);
+        if (!product) return;
+        const existing = draft.find((d) => d.productId === item.productId);
+        if (existing) existing.quantity += item.quantity;
+        else draft.push({ ...item, price: productPrice(product) });
+      });
+      renderDraft();
+      showToast(`Añadido: ${parsed.items.map((i) => `${i.quantity}× ${i.name}`).join(', ')}`);
+      await submitOrder('customer');
+    },
   });
-  if (isVoiceSupported()) {
-    document.querySelector('#voice-button').title = 'Dictar con Web Speech API';
-  }
+
+  customerVoiceBtn.addEventListener('click', () => {
+    if (customerVoice.supported) customerVoice.start();
+    else showToast('Usa Chrome para activar el dictado.');
+  });
+
+  if (isVoiceSupported()) voiceBtn.title = 'Dictar con Web Speech API';
 }
 
 // ── SW messages ───────────────────────────────────────────────────────────
@@ -842,7 +893,25 @@ async function init() {
     renderDraft();
   });
 
-  document.querySelector('#customer-menu').addEventListener('click', () => setView('waiter-view'));
+  document.querySelector('#customer-menu').addEventListener('click', () => {
+    const panel = document.querySelector('#customer-menu-panel');
+    const grid  = document.querySelector('#customer-menu-grid');
+    // Render read-only menu cards
+    grid.innerHTML = menu.map((item) => `
+      <div class="customer-menu-card">
+        <span class="customer-menu-emoji">${item.emoji}</span>
+        <div class="customer-menu-info">
+          <strong>${item.name}</strong>
+          <small>${item.description}</small>
+        </div>
+        <span class="customer-menu-price">${money(productPrice(item))}</span>
+      </div>`).join('');
+    panel.classList.remove('hidden');
+    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  document.querySelector('#customer-menu-close').addEventListener('click', () => {
+    document.querySelector('#customer-menu-panel').classList.add('hidden');
+  });
 
   sensors = setupSensors({
     onShake: () => {
@@ -857,6 +926,17 @@ async function init() {
 
   initVoice();
   initComplaintFlow();
+
+  // ── Handle URL params from QR scan (?view=customer&mesa=N) ──────────
+  const params = new URLSearchParams(location.search);
+  const qrMesa = params.get('mesa');
+  const qrView = params.get('view');
+  if (qrMesa && tableSelect.querySelector(`option[value="${qrMesa}"]`)) {
+    tableSelect.value = qrMesa;
+    tableSelect.dispatchEvent(new Event('change'));
+  }
+  if (qrView === 'customer') setView('customer-view');
+  else if (qrView === 'kitchen') setView('kitchen-view');
 
   window.dispatchEvent(new Event(navigator.onLine ? 'online' : 'offline'));
 }

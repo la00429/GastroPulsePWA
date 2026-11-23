@@ -39,6 +39,10 @@
       "dest": "public/manifest.json"
     },
     {
+      "src": "/qr/(.*)",
+      "dest": "public/qr/$1"
+    },
+    {
       "src": "/icons/(.*)",
       "dest": "public/icons/$1"
     },

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <title>GastroPulse · QR de mesas</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:Inter,ui-sans-serif,system-ui,sans-serif;background:#f8f6f1;padding:32px;color:#17202b}
+    h1{font-size:22px;margin-bottom:6px}
+    p.sub{font-size:13px;color:#75808a;margin-bottom:28px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:24px}
+    .card{background:#fff;border:1px solid #e6e2d9;border-radius:16px;padding:20px 20px 16px;display:flex;flex-direction:column;align-items:center;gap:10px;box-shadow:0 8px 24px #17202b0a}
+    .card img{width:180px;height:180px}
+    .card .label{font-weight:800;font-size:16px;letter-spacing:-.3px}
+    .card .zone{font-size:11px;color:#75808a;font-weight:600;letter-spacing:1px;text-transform:uppercase}
+    .card .url{font-size:9px;color:#aaa;word-break:break-all;text-align:center;margin-top:4px}
+    .brand{display:flex;align-items:center;gap:8px;margin-bottom:20px}
+    .mark{display:grid;place-items:center;width:30px;height:30px;border-radius:9px;background:#ffb454;color:#fff;font-weight:900;font-size:16px}
+    @media print{
+      body{background:#fff;padding:16px}
+      .no-print{display:none}
+      .card{break-inside:avoid;border:1px solid #ccc}
+    }
+  </style>
+</head>
+<body>
+  <div class="brand">
+    <div class="mark">G</div>
+    <strong style="font-size:18px;letter-spacing:-.5px">GastroPulse</strong>
+  </div>
+  <h1>Códigos QR · Mesas</h1>
+  <p class="sub">Imprime esta página y coloca cada QR en la mesa correspondiente. El cliente lo escanea para pedir.</p>
+  <button class="no-print" onclick="window.print()" style="margin-bottom:24px;padding:10px 20px;background:#17202b;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">🖨 Imprimir todos</button>
+
+  <div class="grid">
+    <div class="card">
+      <img src="mesa-1.svg" alt="QR Mesa 1"/>
+      <span class="label">Mesa 1</span>
+      <span class="zone">Terraza</span>
+      <span class="url">gastropulse-pwa.vercel.app/?view=customer&amp;mesa=1</span>
+    </div>
+    <div class="card">
+      <img src="mesa-2.svg" alt="QR Mesa 2"/>
+      <span class="label">Mesa 2</span>
+      <span class="zone">Terraza</span>
+      <span class="url">gastropulse-pwa.vercel.app/?view=customer&amp;mesa=2</span>
+    </div>
+    <div class="card">
+      <img src="mesa-3.svg" alt="QR Mesa 3"/>
+      <span class="label">Mesa 3</span>
+      <span class="zone">Salón</span>
+      <span class="url">gastropulse-pwa.vercel.app/?view=customer&amp;mesa=3</span>
+    </div>
+    <div class="card">
+      <img src="mesa-4.svg" alt="QR Mesa 4"/>
+      <span class="label">Mesa 4</span>
+      <span class="zone">Salón</span>
+      <span class="url">gastropulse-pwa.vercel.app/?view=customer&amp;mesa=4</span>
+    </div>
+    <div class="card">
+      <img src="mesa-5.svg" alt="QR Mesa 5"/>
+      <span class="label">Mesa 5</span>
+      <span class="zone">Salón</span>
+      <span class="url">gastropulse-pwa.vercel.app/?view=customer&amp;mesa=5</span>
+    </div>
+    <div class="card">
+      <img src="mesa-6.svg" alt="QR Mesa 6"/>
+      <span class="label">Mesa 6</span>
+      <span class="zone">Barra</span>
+      <span class="url">gastropulse-pwa.vercel.app/?view=customer&amp;mesa=6</span>
+    </div>
+  </div>
+</body>
+</html>

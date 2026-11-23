@@ -177,7 +177,16 @@
           <small id="customer-voice-hint">Verifica tu ubicación primero para habilitar el pedido por voz.</small>
         </button>
         <div id="customer-transcript" class="voice-transcript hidden" aria-live="polite"></div>
-        <button id="customer-menu" class="secondary-button full-width" style="margin-top:16px">Ver menú completo</button>
+        <button id="customer-menu" class="secondary-button full-width" style="margin-top:16px">Ver carta completa ↓</button>
+
+        <!-- Read-only menu for customers -->
+        <div id="customer-menu-panel" class="customer-menu-panel hidden">
+          <div class="section-heading" style="margin-top:0">
+            <div><p class="eyebrow">CARTA</p><h2>Nuestro menú</h2></div>
+            <button id="customer-menu-close" class="text-button">Cerrar ✕</button>
+          </div>
+          <div id="customer-menu-grid" class="customer-menu-grid"></div>
+        </div>
 
         <!-- ── Reportar problema ───────────────────────────────────────── -->
         <!-- Order wait timer — shown after customer submits an order -->
@@ -226,8 +235,13 @@
 
           <!-- Photo preview -->
           <div id="complaint-preview" class="complaint-preview hidden">
+            <video id="complaint-live-video" class="complaint-live-video hidden" playsinline muted autoplay></video>
             <img id="complaint-img" src="" alt="Foto de la queja" />
-            <button id="complaint-retake" class="complaint-retake-btn" aria-label="Volver a tomar foto">↺ Cambiar foto</button>
+            <div class="complaint-cam-controls hidden" id="complaint-cam-controls">
+              <button id="complaint-capture-now" class="complaint-capture-btn" aria-label="Capturar foto ahora">📷 Capturar ahora</button>
+              <button id="complaint-cam-cancel" class="complaint-cam-cancel-btn" aria-label="Cancelar cámara">✕ Cancelar</button>
+            </div>
+            <button id="complaint-retake" class="complaint-retake-btn hidden" aria-label="Volver a tomar foto">↺ Cambiar foto</button>
           </div>
 
           <div class="complaint-actions">

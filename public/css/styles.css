@@ -140,3 +140,18 @@
 .danger-button{background:var(--danger);color:#fff;border-radius:9px;padding:12px 16px;font-weight:750;border:none;font-size:14px}
 .danger-button:disabled{opacity:.5;cursor:not-allowed}
 .wait-reported{margin-top:10px;font-size:13px;color:var(--mint);font-weight:600;text-align:center}
+
+/* ── Customer read-only menu ─────────────────────────────────────────── */
+.customer-menu-panel{margin-top:20px;border-top:1px solid var(--line);padding-top:20px}
+.customer-menu-grid{display:flex;flex-direction:column;gap:10px;margin-top:12px}
+.customer-menu-card{display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;box-shadow:var(--shadow)}
+.customer-menu-emoji{font-size:32px;flex-shrink:0;width:44px;text-align:center}
+.customer-menu-info{flex:1;min-width:0}
+.customer-menu-info strong{display:block;font-size:14px;font-weight:700}
+.customer-menu-info small{display:block;font-size:11px;color:var(--muted);margin-top:2px}
+.customer-menu-price{font-size:15px;font-weight:800;color:var(--accent);flex-shrink:0}
+/* ── Complaint live video ─────────────────────────────────────────────── */
+.complaint-live-video{width:100%;border-radius:8px;display:block;aspect-ratio:16/9;object-fit:cover;background:#000}
+.complaint-cam-controls{display:flex;gap:8px;margin-top:8px}
+.complaint-capture-btn{flex:1;background:var(--mint);color:#0d1117;border-radius:8px;padding:11px;font-weight:800;font-size:13px;border:none;cursor:pointer}
+.complaint-cam-cancel-btn{background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:11px 14px;font-size:13px;cursor:pointer}
