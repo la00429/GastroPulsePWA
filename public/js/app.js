@@ -470,17 +470,50 @@ document.querySelector('#clear-incidents').addEventListener('click', async () =>
 });
 
 // ── QR scan ───────────────────────────────────────────────────────────────
+function getMesaFromQrValue(value) {
+  const normalized = value.trim();
+
+  try {
+    const url = new URL(normalized, location.origin);
+    const mesaParam = url.searchParams.get('mesa');
+    if (mesaParam && /^\d+$/.test(mesaParam)) return Number(mesaParam);
+  } catch (_) {
+    // Continuar con formatos QR en texto plano.
+  }
+
+  const mesaMatch =
+    normalized.match(/mesa(?:=|[:\s]+)(\d+)/i) ||
+    normalized.match(/^(\d+)$/);
+
+  return mesaMatch ? Number(mesaMatch[1]) : null;
+}
+
+function applyMesaSelection(mesa, { openCustomer = false } = {}) {
+  if (!Number.isInteger(mesa) || mesa < 1) return false;
+
+  if (!tableSelect.querySelector(`option[value="${mesa}"]`)) {
+    const opt = document.createElement('option');
+    opt.value = String(mesa);
+    opt.textContent = `Mesa ${mesa}`;
+    tableSelect.appendChild(opt);
+  }
+
+  tableSelect.value = String(mesa);
+  tableSelect.dispatchEvent(new Event('change'));
+
+  if (openCustomer) setView('customer-view');
+  return true;
+}
+
 document.querySelector('#scan-qr').addEventListener('click', async () => {
   qrOverlay.classList.remove('hidden');
   try {
     const value = await scanQrCode(qrVideo);
     qrOverlay.classList.add('hidden');
     if (value) {
-      const match = value.match(/(?:mesa[:\s]*)(\d+)/i) || value.match(/^(\d+)$/);
-      if (match) {
-        tableSelect.value = match[1];
-        tableSelect.dispatchEvent(new Event('change'));
-        showToast(`Mesa ${match[1]} seleccionada por QR.`);
+      const mesa = getMesaFromQrValue(value);
+      if (mesa && applyMesaSelection(mesa, { openCustomer: true })) {
+        showToast(`Mesa ${mesa} seleccionada por QR.`);
       } else {
         showToast(`QR leído: ${value}`);
       }
@@ -989,17 +1022,10 @@ async function init() {
   const qrMesa = params.get('mesa');
   const qrView = params.get('view');
   if (qrMesa) {
-    // Add option dynamically if mesa number isn't in the predefined list
-    if (!tableSelect.querySelector(`option[value="${qrMesa}"]`)) {
-      const opt = document.createElement('option');
-      opt.value = qrMesa;
-      opt.textContent = `Mesa ${qrMesa}`;
-      tableSelect.appendChild(opt);
+    const mesa = Number(qrMesa);
+    if (Number.isInteger(mesa) && mesa > 0) {
+      applyMesaSelection(mesa);
     }
-    tableSelect.value = qrMesa;
-    // Update all customer-table displays
-    document.querySelectorAll('#customer-table').forEach((el) => { el.textContent = qrMesa; });
-    renderDraft();
   }
   if (qrView === 'customer') setView('customer-view');
   else if (qrView === 'kitchen') setView('kitchen-view');

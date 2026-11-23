@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gastropulse-shell-v2';
+const CACHE_NAME = 'gastropulse-shell-v3';
 const APP_SHELL = [
   '/',
   '/index.html',
@@ -10,6 +10,8 @@ const APP_SHELL = [
   '/js/push.js',
   '/manifest.json',
   '/icons/icon.svg',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
 ];
 
 // ── Install: pre-cache app shell ──────────────────────────────────────────
@@ -30,11 +32,31 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// ── Fetch: cache-first for GET, pass-through for mutations ────────────────
+// ── Fetch: navigation and assets offline-first ─────────────────────────────
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   // Don't cache API calls
   if (event.request.url.includes('/api/')) return;
+
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      caches.match('/index.html').then((cached) => {
+        const networkRequest = fetch(event.request)
+          .then((response) => {
+            if (response.ok) {
+              const copy = response.clone();
+              caches.open(CACHE_NAME).then((cache) => cache.put('/index.html', copy));
+            }
+            return response;
+          })
+          .catch(() => cached);
+
+        return cached || networkRequest;
+      })
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((cached) => {
       if (cached) return cached;
