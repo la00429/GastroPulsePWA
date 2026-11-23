@@ -39,7 +39,11 @@
       "dest": "public/manifest.json"
     },
     {
-      "src": "/(css|js|icons)/(.*)",
+      "src": "/icons/(.*)",
+      "dest": "public/icons/$1"
+    },
+    {
+      "src": "/(css|js)/(.*)",
       "dest": "public/$1/$2"
     },
     {
